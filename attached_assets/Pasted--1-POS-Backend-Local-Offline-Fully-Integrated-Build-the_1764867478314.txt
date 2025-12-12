@@ -1,0 +1,344 @@
+🔥 1. POS Backend (Local, Offline, Fully Integrated)
+
+Build the backend that includes:
+
+Backend Components
+
+Local Node.js server (embedded)
+
+SQLite database file (shamrock.db)
+
+Database schemas for:
+
+Products
+
+Sales
+
+Users
+
+Settings
+
+Shifts
+
+API endpoints for:
+
+Products
+
+Sales
+
+Reports
+
+Authentication
+
+Settings
+
+Shifts / Day Opening / Closing
+
+Local offline queue for sales when internet fails
+
+Logging system for errors + transactions
+
+🔥 2. POS Database (SQLite)
+
+Build the database with these tables:
+
+Tables Required
+
+products
+
+sales
+
+users
+
+settings
+
+shifts
+
+Fields Required
+
+Products
+
+barcode
+
+name
+
+price
+
+category
+
+stock
+
+cost
+
+taxable
+
+margin
+
+Sales
+
+id
+
+items (JSON)
+
+subtotal
+
+tax
+
+total
+
+payment_type
+
+created_at
+
+Users
+
+username
+
+password
+
+role
+
+Settings
+
+tax rate
+
+store name
+
+printer config
+
+receipt header/footer
+
+Shifts
+
+opened_by
+
+opened_at
+
+closed_at
+
+total_sales
+
+🔥 3. Hardware Layer
+
+Build support for:
+
+Hardware
+
+USB Thermal Printer
+
+ESC/POS printing
+
+Cash drawer (kick-out)
+
+Barcode scanner input
+
+On-screen keypad
+
+Customer display (optional)
+
+Printer System
+
+Print receipts
+
+Test print
+
+Open drawer
+
+Print returns
+
+Print shift summary
+
+🔥 4. POS App Interface (Electron Frontend)
+
+Build the UI with:
+
+Main POS Screen
+
+Product grid
+
+Cart panel
+
+Add/remove items
+
+Quantity adjustment
+
+Discounts
+
+Tax toggle
+
+Total display
+
+Payment buttons (Cash, Card, EBT, etc.)
+
+Navigation
+
+Sell
+
+Products
+
+Reports
+
+Settings
+
+Manage Users
+
+Product Management
+
+Add
+
+Edit
+
+Delete
+
+Categories
+
+Pricing
+
+Inventory
+
+Barcode generator
+
+Settings Screen
+
+Tax
+
+Store info
+
+Printer selection
+
+Receipt header/footer
+
+Theme (Light/Dark)
+
+🔥 5. Reports System
+
+Build reporting screens for:
+
+Reports
+
+Daily sales (X Report)
+
+End of day (Z Report)
+
+Payment type summary
+
+Items sold summary
+
+Refunds
+
+Voids
+
+Shift reports
+
+Export CSV
+
+🔥 6. Authentication / User System
+
+Build:
+
+Roles
+
+Owner
+
+Manager
+
+Cashier
+
+Features
+
+Login screen
+
+PIN login (optional)
+
+Permissions
+
+Override actions (voids, discounts, no sale)
+
+🔥 7. Offline Mode
+
+Build systems for:
+
+Offline
+
+Local caching
+
+Offline transaction queue
+
+Auto-sync when online returns
+
+🔥 8. Real Windows Installer
+
+Build:
+
+Installer Package
+
+.exe installer
+
+App folder creation
+
+Desktop shortcut
+
+Auto-start
+
+Auto-update (optional)
+
+🔥 9. App Shell Integration
+
+Build the following:
+
+Electron Integration
+
+App loads frontend
+
+App launches backend automatically
+
+Full screen mode
+
+Disable browser features
+
+Custom title bar
+
+Logout button
+
+🔥 10. Backup & Restore System
+
+Build:
+
+Backup
+
+Export database
+
+Import database
+
+Auto-daily backup to folder
+
+USB backup support
+
+🔥 11. Clean Folder Structure
+
+Build a clean project layout:
+
+/app
+   /frontend
+   /backend
+   /database
+   /config
+   /reports
+   /printers
+main.js
+server.js
+package.json
+
+🔥 12. Deployment Package
+
+Build deliverables:
+
+Deliverables
+
+Windows installer
+
+Windows portable build
+
+Linux build (optional for kiosks)
+
+Android APK (optional for portable scanner devices)

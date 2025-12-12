@@ -1,0 +1,906 @@
+const express = require("express");
+const path = require("path");
+const fs = require("fs");
+const bcrypt = require("bcryptjs");
+const { google } = require("googleapis");
+
+const { 
+  initDatabase, 
+  productRepo, 
+  salesRepo, 
+  userRepo, 
+  shiftRepo, 
+  settingsRepo,
+  dailyReportsRepo,
+  getDb,
+  saveDb,
+  dbPath 
+} = require("./database");
+
+const PRODUCTS_SPREADSHEET_ID = process.env.PRODUCTS_SPREADSHEET_ID || "1y2TG1m9usaHE0uA6oOOiUYoj26n9jZRMXlQ9ASQ6Ptw";
+const SALES_SPREADSHEET_ID = process.env.SALES_SPREADSHEET_ID || "1tzcyBK-wGnh8eFd8AZSA_xs1oMzCDg1NQgzfgFSvN5Q";
+const PRODUCTS_SHEET = "Sheet1";
+const SALES_SHEET = "Sheet1";
+
+let sheetsApi = null;
+
+async function initGoogleSheets() {
+  try {
+    // Use environment variable for credentials (more secure, no file needed)
+    if (!process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+      console.log("GOOGLE_APPLICATION_CREDENTIALS_JSON not set - Sheets sync disabled");
+      return null;
+    }
+    
+    const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"]
+    });
+    
+    sheetsApi = google.sheets({ version: "v4", auth });
+    console.log("Google Sheets API initialized successfully");
+    return sheetsApi;
+  } catch (err) {
+    console.error("Failed to initialize Google Sheets:", err.message);
+    console.error("Full error:", err);
+    return null;
+  }
+}
+
+async function syncProductToSheets(product) {
+  if (!sheetsApi) return;
+  try {
+    const existingData = await sheetsApi.spreadsheets.values.get({
+      spreadsheetId: PRODUCTS_SPREADSHEET_ID,
+      range: `${PRODUCTS_SHEET}!A:A`
+    });
+    
+    const rows = existingData.data.values || [];
+    let rowIndex = -1;
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i][0] === product.barcode) {
+        rowIndex = i + 1;
+        break;
+      }
+    }
+    
+    const rowData = [
+      product.barcode,
+      product.name,
+      product.price,
+      product.category || ""
+    ];
+    
+    if (rowIndex > 0) {
+      await sheetsApi.spreadsheets.values.update({
+        spreadsheetId: PRODUCTS_SPREADSHEET_ID,
+        range: `${PRODUCTS_SHEET}!A${rowIndex}:D${rowIndex}`,
+        valueInputOption: "RAW",
+        resource: { values: [rowData] }
+      });
+      console.log(`Updated product in Sheets: ${product.barcode}`);
+    } else {
+      await sheetsApi.spreadsheets.values.append({
+        spreadsheetId: PRODUCTS_SPREADSHEET_ID,
+        range: `${PRODUCTS_SHEET}!A:D`,
+        valueInputOption: "RAW",
+        insertDataOption: "INSERT_ROWS",
+        resource: { values: [rowData] }
+      });
+      console.log(`Added product to Sheets: ${product.barcode}`);
+    }
+  } catch (err) {
+    console.error("Error syncing product to Sheets:", err.message);
+  }
+}
+
+async function syncSaleToSheets(sale) {
+  if (!sheetsApi) {
+    console.log("Sheets API not initialized - skipping sync");
+    return;
+  }
+  try {
+    console.log("Syncing sale to Sheets:", sale.saleId);
+    const rowData = [
+      sale.timestamp || new Date().toISOString(),
+      sale.saleId,
+      sale.paymentType,
+      sale.subtotal,
+      sale.discount || 0,
+      sale.tax || 0,
+      sale.total,
+      sale.itemCount
+    ];
+    console.log("Row data:", rowData);
+    
+    const result = await sheetsApi.spreadsheets.values.append({
+      spreadsheetId: SALES_SPREADSHEET_ID,
+      range: `${SALES_SHEET}!A:H`,
+      valueInputOption: "RAW",
+      insertDataOption: "INSERT_ROWS",
+      resource: { values: [rowData] }
+    });
+    console.log(`Added sale to Sheets: ${sale.saleId}`, result.data);
+  } catch (err) {
+    console.error("Error syncing sale to Sheets:", err.message);
+    console.error("Full error:", err);
+  }
+}
+
+async function deleteProductFromSheets(barcode) {
+  if (!sheetsApi) return;
+  try {
+    const existingData = await sheetsApi.spreadsheets.values.get({
+      spreadsheetId: PRODUCTS_SPREADSHEET_ID,
+      range: `${PRODUCTS_SHEET}!A:A`
+    });
+    
+    const rows = existingData.data.values || [];
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i][0] === barcode) {
+        await sheetsApi.spreadsheets.values.clear({
+          spreadsheetId: PRODUCTS_SPREADSHEET_ID,
+          range: `${PRODUCTS_SHEET}!A${i + 1}:D${i + 1}`
+        });
+        console.log(`Deleted product from Sheets: ${barcode}`);
+        break;
+      }
+    }
+  } catch (err) {
+    console.error("Error deleting product from Sheets:", err.message);
+  }
+}
+
+async function syncProductsFromSheets() {
+  if (!sheetsApi) {
+    return { success: false, error: "Google Sheets not connected" };
+  }
+  try {
+    console.log("Starting sync from Google Sheets...");
+    const response = await sheetsApi.spreadsheets.values.get({
+      spreadsheetId: PRODUCTS_SPREADSHEET_ID,
+      range: `${PRODUCTS_SHEET}!A:D`
+    });
+    
+    const rows = response.data.values || [];
+    if (rows.length === 0) {
+      return { success: true, synced: 0, message: "No products in Sheets" };
+    }
+    
+    let synced = 0;
+    let updated = 0;
+    let skipped = 0;
+    
+    for (const row of rows) {
+      const [barcode, name, price, category] = row;
+      if (!barcode || !name) {
+        skipped++;
+        continue;
+      }
+      
+      const productData = {
+        barcode: String(barcode).trim(),
+        name: String(name).trim(),
+        price: parseFloat(price) || 0,
+        category: category || "Other / Misc"
+      };
+      
+      try {
+        const existing = await productRepo.getByBarcode(productData.barcode);
+        if (existing) {
+          await productRepo.update(productData.barcode, productData);
+          updated++;
+        } else {
+          await productRepo.create(productData);
+          synced++;
+        }
+      } catch (err) {
+        console.error(`Error syncing product ${barcode}:`, err.message);
+        skipped++;
+      }
+    }
+    
+    console.log(`Sync complete: ${synced} new, ${updated} updated, ${skipped} skipped`);
+    return { success: true, synced, updated, skipped, total: rows.length };
+  } catch (err) {
+    console.error("Error syncing from Sheets:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+initGoogleSheets();
+
+const app = express();
+
+app.use(express.json());
+
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  next();
+});
+
+const staticDir = process.env.SHAMROCK_STATIC_DIR || __dirname;
+const resourcesDir = process.env.SHAMROCK_RESOURCES_DIR || __dirname;
+const isPackaged = process.env.SHAMROCK_IS_PACKAGED === 'true';
+
+console.log('Server staticDir:', staticDir);
+console.log('Server resourcesDir:', resourcesDir);
+console.log('Server isPackaged:', isPackaged);
+
+app.use(express.static(staticDir));
+
+const productsFile = path.join(resourcesDir, "products.json");
+const salesFile = path.join(resourcesDir, "sales.json");
+
+function loadLocalProducts() {
+  try {
+    if (fs.existsSync(productsFile)) {
+      const data = fs.readFileSync(productsFile, "utf-8");
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+  } catch (e) {
+    console.error("Error reading products.json:", e.message);
+  }
+  return [];
+}
+
+function loadLocalSales() {
+  try {
+    if (fs.existsSync(salesFile)) {
+      const data = fs.readFileSync(salesFile, "utf-8");
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+  } catch (e) {
+    console.error("Error reading sales.json:", e.message);
+  }
+  return [];
+}
+
+app.get("/api/products", async (req, res) => {
+  try {
+    const products = await productRepo.getAll();
+    res.json({ success: true, products, source: "sqlite" });
+  } catch (err) {
+    console.error("Error loading products:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/products/sync-from-sheets", async (req, res) => {
+  try {
+    const result = await syncProductsFromSheets();
+    res.json(result);
+  } catch (err) {
+    console.error("Error syncing from Sheets:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/products", async (req, res) => {
+  const { barcode, name, price, cost, category, stock, taxable, age_restricted, min_age } = req.body || {};
+  
+  if (!barcode || !name || typeof price !== "number") {
+    return res.status(400).json({ success: false, error: "Invalid product data" });
+  }
+
+  try {
+    const existing = await productRepo.getByBarcode(barcode);
+    const productData = { barcode, name, price, cost, category, stock, taxable, age_restricted, min_age };
+    
+    if (existing) {
+      await productRepo.update(barcode, productData);
+    } else {
+      await productRepo.create(productData);
+    }
+    
+    syncProductToSheets(productData);
+    
+    res.json({ success: true, message: existing ? "Product updated" : "Product created", saved_to: "sqlite+sheets" });
+  } catch (err) {
+    console.error("Error saving product:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete("/api/products/:barcode", async (req, res) => {
+  const { barcode } = req.params;
+  if (!barcode) {
+    return res.status(400).json({ success: false, error: "Missing barcode" });
+  }
+
+  try {
+    await productRepo.delete(barcode);
+    deleteProductFromSheets(barcode);
+    res.json({ success: true, deleted_from: "sqlite+sheets" });
+  } catch (err) {
+    console.error("Error deleting product:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/products/categories", async (req, res) => {
+  try {
+    const categories = await productRepo.getCategories();
+    res.json({ success: true, categories });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/products/update-stock", async (req, res) => {
+  const { barcode, quantity, reason, userId } = req.body;
+  try {
+    const newStock = await productRepo.updateStock(barcode, quantity, reason, userId);
+    if (newStock === null) {
+      return res.status(404).json({ success: false, error: "Product not found" });
+    }
+    res.json({ success: true, newStock });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/sales", async (req, res) => {
+  const { items, paymentType, subtotal, discount, tax, total, clientTimestamp, userId, shiftId } = req.body || {};
+  const saleId = Date.now().toString();
+  const itemCount = Array.isArray(items) ? items.reduce((sum, it) => sum + (it.qty || 1), 0) : 0;
+  const timestamp = clientTimestamp || new Date().toISOString();
+  const safePaymentType = paymentType || 'Cash';
+
+  console.log("Sale request received:", { items: items?.length, paymentType: safePaymentType, subtotal, total, userId });
+
+  try {
+    const currentShift = await shiftRepo.getOpen();
+    
+    await salesRepo.create({
+      saleId,
+      items: items || [],
+      subtotal: subtotal || 0,
+      discount: discount || 0,
+      tax: tax || 0,
+      total: total || 0,
+      paymentType: safePaymentType,
+      itemCount,
+      userId: userId !== undefined ? userId : null,
+      shiftId: currentShift ? currentShift.id : null
+    });
+
+    for (const item of items || []) {
+      if (item.barcode) {
+        await productRepo.updateStock(item.barcode, -(item.qty || 1), 'sale', userId);
+      }
+    }
+
+    syncSaleToSheets({
+      timestamp,
+      saleId,
+      paymentType,
+      subtotal: subtotal || 0,
+      discount: discount || 0,
+      tax: tax || 0,
+      total: total || 0,
+      itemCount,
+      items
+    });
+
+    res.json({ success: true, saleId, saved_to: "sqlite+sheets" });
+  } catch (err) {
+    console.error("Error saving sale:", err);
+    console.error("Error type:", typeof err);
+    console.error("Error message:", err?.message);
+    console.error("Error stack:", err?.stack);
+    res.status(500).json({ success: false, error: err?.message || String(err) });
+  }
+});
+
+app.get("/api/sales", async (req, res) => {
+  try {
+    const sales = await salesRepo.getAll(500);
+    const formatted = sales.map(s => ({
+      timestamp: s.created_at,
+      saleId: s.sale_id,
+      paymentType: s.payment_type,
+      subtotal: s.subtotal,
+      discount: s.discount,
+      tax: s.tax,
+      total: s.total,
+      itemCount: s.item_count,
+      voided: s.voided === 1
+    }));
+    res.json({ success: true, sales: formatted });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/sales/today", async (req, res) => {
+  try {
+    const sales = await salesRepo.getTodaySales();
+    res.json({ success: true, sales });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/sales/:saleId/void", async (req, res) => {
+  const { saleId } = req.params;
+  const { reason, userId } = req.body;
+  try {
+    await salesRepo.voidSale(saleId, reason, userId);
+    res.json({ success: true, message: "Sale voided" });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/eod-today", async (req, res) => {
+  try {
+    const summary = await salesRepo.getDailySummary();
+    const totals = {
+      Cash: summary.cash_total || 0,
+      "Debit Card": summary.card_total || 0,
+      EBT: summary.ebt_total || 0,
+      "Store Credit": summary.store_credit_total || 0
+    };
+    
+    const sales = await salesRepo.getTodaySales();
+    const counts = { Cash: 0, "Debit Card": 0, EBT: 0, "Store Credit": 0 };
+    for (const sale of sales) {
+      if (counts[sale.payment_type] !== undefined) {
+        counts[sale.payment_type]++;
+      }
+    }
+
+    res.json({
+      success: true,
+      totals,
+      counts,
+      grandTotal: summary.total_sales || 0,
+      transactionCount: summary.transaction_count || 0,
+      totalItems: summary.total_items || 0,
+      totalDiscounts: summary.total_discounts || 0,
+      totalTax: summary.total_tax || 0
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/daily-reports", async (req, res) => {
+  try {
+    const summary = await salesRepo.getDailySummary();
+    const today = new Date().toISOString().split('T')[0];
+    
+    const reportData = {
+      report_date: today,
+      total_sales: summary.total_sales || 0,
+      cash_sales: summary.cash_total || 0,
+      card_sales: summary.card_total || 0,
+      ebt_sales: summary.ebt_total || 0,
+      tax_collected: summary.total_tax || 0,
+      transaction_count: summary.transaction_count || 0,
+      refund_total: 0,
+      report_data: JSON.stringify(summary),
+      created_by: req.body.userId || null
+    };
+    
+    await dailyReportsRepo.save(reportData);
+    res.json({ success: true, message: "Daily report saved", report: reportData });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/daily-reports", async (req, res) => {
+  try {
+    const reports = await dailyReportsRepo.getAll();
+    res.json({ success: true, reports });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/daily-reports/:date", async (req, res) => {
+  try {
+    const { date } = req.params;
+    const report = await dailyReportsRepo.getByDate(date);
+    if (report) {
+      res.json({ success: true, report });
+    } else {
+      res.json({ success: false, error: "No report found for this date" });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/daily-reports-week", async (req, res) => {
+  try {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 6);
+    const start = startDate.toISOString().split('T')[0];
+    const end = endDate.toISOString().split('T')[0];
+    const reports = await dailyReportsRepo.getDateRange(start, end);
+    res.json({ success: true, reports });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  const { username, pin } = req.body;
+  if (!username || !pin) {
+    return res.status(400).json({ success: false, error: "Username and PIN required" });
+  }
+
+  try {
+    const user = await userRepo.verifyPin(username, pin);
+    if (user) {
+      res.json({ success: true, user });
+    } else {
+      res.status(401).json({ success: false, error: "Invalid username or PIN" });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/users", async (req, res) => {
+  try {
+    const users = await userRepo.getAll();
+    res.json({ success: true, users });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/users", async (req, res) => {
+  const { username, pin, displayName, role } = req.body;
+  if (!username || !pin) {
+    return res.status(400).json({ success: false, error: "Username and PIN required" });
+  }
+
+  try {
+    const id = await userRepo.create({ username, pin, displayName, role });
+    res.json({ success: true, id });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put("/api/users/:id", async (req, res) => {
+  const { id } = req.params;
+  const { displayName, role } = req.body;
+  try {
+    await userRepo.update(id, { displayName, role });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put("/api/users/:id/pin", async (req, res) => {
+  const { id } = req.params;
+  const { newPin } = req.body;
+  if (!newPin || newPin.length < 4) {
+    return res.status(400).json({ success: false, error: "PIN must be at least 4 digits" });
+  }
+  try {
+    await userRepo.updatePin(id, newPin);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete("/api/users/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    await userRepo.deactivate(id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/shifts/current", async (req, res) => {
+  try {
+    const shift = await shiftRepo.getOpen();
+    res.json({ success: true, shift: shift || null, isOpen: !!shift });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/shifts/open", async (req, res) => {
+  const { userId, startingCash } = req.body;
+  if (!userId) {
+    return res.status(400).json({ success: false, error: "User ID required" });
+  }
+
+  try {
+    const shiftId = await shiftRepo.open(userId, startingCash || 0);
+    res.json({ success: true, shiftId });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/shifts/close", async (req, res) => {
+  const { shiftId, userId, endingCash, notes } = req.body;
+  if (!shiftId || !userId) {
+    return res.status(400).json({ success: false, error: "Shift ID and User ID required" });
+  }
+
+  try {
+    await shiftRepo.close(shiftId, userId, endingCash, notes);
+    const closedShift = await shiftRepo.getById(shiftId);
+    res.json({ success: true, shift: closedShift });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/shifts", async (req, res) => {
+  try {
+    const shifts = await shiftRepo.getRecent(20);
+    res.json({ success: true, shifts });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/shifts/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const shift = await shiftRepo.getById(id);
+    if (!shift) {
+      return res.status(404).json({ success: false, error: "Shift not found" });
+    }
+    const sales = await salesRepo.getShiftSales(id);
+    res.json({ success: true, shift, sales });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/settings", async (req, res) => {
+  try {
+    const settings = await settingsRepo.getAll();
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/settings", async (req, res) => {
+  const settings = req.body;
+  try {
+    for (const [key, value] of Object.entries(settings)) {
+      await settingsRepo.set(key, value);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/reports/daily/:date?", async (req, res) => {
+  const date = req.params.date || new Date().toISOString().slice(0, 10);
+  try {
+    const summary = await salesRepo.getDailySummary(date);
+    res.json({ success: true, date, summary });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/reports/x-report", async (req, res) => {
+  try {
+    const currentShift = await shiftRepo.getOpen();
+    if (!currentShift) {
+      return res.json({ success: true, message: "No shift open", data: null });
+    }
+
+    const sales = await salesRepo.getShiftSales(currentShift.id);
+    let totalSales = 0, cashSales = 0, cardSales = 0, ebtSales = 0, itemCount = 0;
+    
+    for (const sale of sales) {
+      totalSales += sale.total;
+      itemCount += sale.item_count;
+      if (sale.payment_type === 'Cash') cashSales += sale.total;
+      else if (sale.payment_type === 'Debit Card') cardSales += sale.total;
+      else if (sale.payment_type === 'EBT') ebtSales += sale.total;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        shiftId: currentShift.id,
+        openedAt: currentShift.opened_at,
+        startingCash: currentShift.starting_cash,
+        transactionCount: sales.length,
+        totalSales,
+        cashSales,
+        cardSales,
+        ebtSales,
+        itemCount
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/reports/z-report/:shiftId", async (req, res) => {
+  const { shiftId } = req.params;
+  try {
+    const shift = await shiftRepo.getById(shiftId);
+    if (!shift) {
+      return res.status(404).json({ success: false, error: "Shift not found" });
+    }
+    const sales = await salesRepo.getShiftSales(shiftId);
+    res.json({ success: true, shift, sales });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/reports/export/csv", async (req, res) => {
+  const { startDate, endDate } = req.query;
+  try {
+    let sales;
+    if (startDate && endDate) {
+      sales = await salesRepo.getByDateRange(startDate, endDate);
+    } else {
+      sales = await salesRepo.getAll(10000);
+    }
+
+    let csv = "Date,Sale ID,Payment Type,Subtotal,Discount,Tax,Total,Items\n";
+    for (const sale of sales) {
+      csv += `"${sale.created_at}","${sale.sale_id}","${sale.payment_type}",${sale.subtotal},${sale.discount},${sale.tax},${sale.total},${sale.item_count}\n`;
+    }
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="sales-export-${new Date().toISOString().slice(0,10)}.csv"`);
+    res.send(csv);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/backup", async (req, res) => {
+  try {
+    const backupDir = path.join(__dirname, "backups");
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir);
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupName = `shamrock-backup-${timestamp}.db`;
+    const backupPath = path.join(backupDir, backupName);
+
+    fs.copyFileSync(dbPath, backupPath);
+
+    const stats = fs.statSync(backupPath);
+    
+    const db = await getDb();
+    db.run('INSERT INTO backups (filename, file_path, size_bytes, backup_type) VALUES (?, ?, ?, ?)',
+      [backupName, backupPath, stats.size, "manual"]);
+    saveDb();
+
+    res.json({ success: true, filename: backupName, path: backupPath, size: stats.size });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/backups", async (req, res) => {
+  try {
+    const db = await getDb();
+    const result = db.exec("SELECT * FROM backups ORDER BY created_at DESC");
+    const backups = result.length ? result[0].values.map(row => {
+      const cols = result[0].columns;
+      const obj = {};
+      cols.forEach((c, i) => obj[c] = row[i]);
+      return obj;
+    }) : [];
+    res.json({ success: true, backups });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/migrate", async (req, res) => {
+  try {
+    let imported = 0;
+
+    const localProducts = loadLocalProducts();
+    if (localProducts.length > 0) {
+      imported = await productRepo.importBulk(localProducts);
+      console.log(`Migrated ${imported} products from local JSON`);
+    }
+
+    const localSales = loadLocalSales();
+    if (localSales.length > 0) {
+      for (const sale of localSales) {
+        try {
+          await salesRepo.create({
+            saleId: sale.saleId || Date.now().toString(),
+            items: sale.items || [],
+            subtotal: sale.subtotal || 0,
+            discount: sale.discount || 0,
+            tax: sale.tax || 0,
+            total: sale.total || 0,
+            paymentType: sale.paymentType || 'Cash',
+            itemCount: sale.itemCount || 0
+          });
+        } catch (e) {}
+      }
+      console.log(`Migrated ${localSales.length} sales from local JSON`);
+    }
+
+    res.json({ 
+      success: true, 
+      productsImported: imported,
+      salesImported: localSales.length
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/status", async (req, res) => {
+  try {
+    const products = await productRepo.getAll();
+    const currentShift = await shiftRepo.getOpen();
+    const settings = await settingsRepo.getAll();
+
+    res.json({
+      success: true,
+      database: "SQLite",
+      databasePath: dbPath,
+      productCount: products.length,
+      shiftOpen: !!currentShift,
+      currentShiftId: currentShift ? currentShift.id : null,
+      settings
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "login.html"));
+});
+
+async function start() {
+  await initDatabase();
+  
+  const products = await productRepo.getAll();
+  if (products.length === 0) {
+    const localProducts = loadLocalProducts();
+    if (localProducts.length > 0) {
+      await productRepo.importBulk(localProducts);
+      console.log(`Auto-migrated ${localProducts.length} products from products.json`);
+    }
+  }
+
+  const PORT = 5000;
+  app.listen(PORT, "0.0.0.0", async () => {
+    const allProducts = await productRepo.getAll();
+    console.log(`Shamrock POS running on http://localhost:${PORT}`);
+    console.log(`Database: SQLite (${dbPath})`);
+    console.log(`Products loaded: ${allProducts.length}`);
+  });
+}
+
+module.exports = { start, app };
+
+if (require.main === module) {
+  start();
+}

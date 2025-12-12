@@ -1,0 +1,125 @@
+1️⃣ PRINTER DOES NOT PRINT FROM THE APP
+Problem:
+
+Windows prints test pages, but the POS app does not print.
+
+Cause:
+
+The app is NOT using the correct printer name.
+
+Fix:
+
+Use EXACT printer name:
+
+volcora recipit printer
+
+
+(and YES, spelled with the typo — must match Windows exactly)
+
+Code to fix (main.js or printer.js):
+const PRINTER_NAME = "volcora recipit printer";
+
+webContents.print({
+  silent: true,
+  deviceName: PRINTER_NAME
+});
+
+2️⃣ CASH DRAWER DOES NOT OPEN
+Problem:
+
+Drawer opens ONLY when the ESC/POS command is sent to the printer.
+
+Cause:
+
+Drawer command not included in print code.
+
+Fix (after printing):
+const escpos = Buffer.from([0x1B, 0x70, 0x00, 0x19, 0xFA]);
+printerPort.write(escpos);
+
+3️⃣ EDIT BUTTON DOES NOT WORK (POS + Laptop)
+Problem:
+
+Clicking “Edit” shows NOTHING.
+
+Cause:
+
+Broken file paths or the edit modal JS is not loading.
+
+Fix:
+
+Replit must check:
+
+products.js
+
+products.html
+
+products.json path
+
+Make sure the modal loads correctly
+
+Ensure correct path:
+
+const products = require("./products.json");
+
+
+Or for remote loading:
+
+fetch("products.json")
+
+4️⃣ CATEGORIES (“CASUAL”) DOES NOT OPEN
+Problem:
+
+Category page or item list does not load.
+
+Cause:
+
+HTML/JS file not linked correctly OR broken file path.
+
+Fix:**
+
+Check:
+
+categories.html
+
+Router/navigation code
+
+Ensure the file exists and is loaded with the correct path:
+
+mainWindow.loadFile("categories.html");
+
+5️⃣ AUTO-UPDATE LOGIC MUST BE APPLIED
+
+You already set up GitHub.
+
+Replit must now:
+
+Add auto-update logic into main.js
+
+Configure Electron-updater
+
+Point updates to GitHub releases
+
+Ensure packaged app checks for updates on startup
+
+(We will generate this once printing and editing are fixed.)
+
+6️⃣ ENSURE ALL PATHS WORK ON BOTH LAPTOP + POS
+Problem:
+
+Paths work on Replit but break after packaging.
+
+Fix:
+
+Use dynamic Electron-safe paths:
+
+const path = require("path");
+const dataPath = path.join(app.getPath("userData"), "products.json");
+
+7️⃣ REPLIT GIT COMMANDS (FOR EVERY UPDATE)
+
+After editing:
+
+git add .
+git commit -m "POS fixes"
+git push origin main
