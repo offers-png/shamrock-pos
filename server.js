@@ -26,13 +26,35 @@ let sheetsApi = null;
 
 async function initGoogleSheets() {
   try {
-    // Use environment variable for credentials (more secure, no file needed)
-    if (!process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
-      console.log("GOOGLE_APPLICATION_CREDENTIALS_JSON not set - Sheets sync disabled");
+    let credentials = null;
+    
+    // Method 1: Try environment variable first (for Replit/secure deployments)
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+      console.log("Using Google credentials from environment variable");
+      credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+    } else {
+      // Method 2: Try credentials file (for packaged Windows app)
+      const possiblePaths = [
+        path.join(process.env.SHAMROCK_RESOURCES_DIR || __dirname, "google-credentials.json"),
+        path.join(__dirname, "google-credentials.json"),
+        path.join(process.resourcesPath || __dirname, "google-credentials.json")
+      ];
+      
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          console.log("Using Google credentials from file:", p);
+          credentials = JSON.parse(fs.readFileSync(p, "utf-8"));
+          break;
+        }
+      }
+    }
+    
+    if (!credentials) {
+      console.log("Google credentials not found - Sheets sync disabled");
+      console.log("Set GOOGLE_APPLICATION_CREDENTIALS_JSON env var or place google-credentials.json file");
       return null;
     }
     
-    const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"]
