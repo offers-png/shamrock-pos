@@ -1984,6 +1984,23 @@
       taxSpan.textContent = tax.toFixed(2);
       totalSpan.textContent = total.toFixed(2);
       taxRateLabel.textContent = taxEnabled ? "8" : "0";
+      
+      syncCustomerDisplay(subtotal, tax, total);
+    }
+    
+    function syncCustomerDisplay(subtotal, tax, total) {
+      if (window.electronAPI && window.electronAPI.updateCustomerCart) {
+        window.electronAPI.updateCustomerCart({
+          items: cart.map(item => ({
+            name: item.name,
+            qty: item.qty,
+            price: item.price
+          })),
+          subtotal: subtotal,
+          tax: tax,
+          total: total
+        });
+      }
     }
 
     function clearCart() {

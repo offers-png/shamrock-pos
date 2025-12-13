@@ -1,6 +1,6 @@
 {
   "name": "shamrock-pos",
-  "version": "1.0.24",
+  "version": "1.0.25",
   "description": "Shamrock Market POS Desktop App",
   "author": "Shamrock Market",
   "main": "main.js",
@@ -24,6 +24,7 @@
       "products.html",
       "settings.html",
       "reports.html",
+      "customer-display.html",
       "styles.css",
       "main.js",
       "server.js",
@@ -63,6 +64,10 @@
       {
         "from": "node_modules/sql.js/dist/sql-wasm.wasm",
         "to": "sql-wasm.wasm"
+      },
+      {
+        "from": "marketing-images",
+        "to": "marketing-images"
       }
     ],
     "win": {

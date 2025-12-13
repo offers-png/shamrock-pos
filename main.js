@@ -1,9 +1,10 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
+let customerWindow;
 
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = true;
@@ -159,6 +160,79 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    if (customerWindow) {
+      customerWindow.close();
+    }
+  });
+}
+
+function getMarketingImages() {
+  const marketingDir = app.isPackaged 
+    ? path.join(process.resourcesPath, 'marketing-images')
+    : path.join(__dirname, 'marketing-images');
+  
+  try {
+    if (!fs.existsSync(marketingDir)) {
+      console.log('Marketing images folder not found:', marketingDir);
+      return [];
+    }
+    
+    const files = fs.readdirSync(marketingDir);
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+    
+    const images = files
+      .filter(file => imageExtensions.includes(path.extname(file).toLowerCase()))
+      .map(file => {
+        const filePath = path.join(marketingDir, file);
+        return 'file://' + filePath.replace(/\\/g, '/');
+      });
+    
+    console.log('Found marketing images:', images.length);
+    return images;
+  } catch (err) {
+    console.error('Error reading marketing images:', err.message);
+    return [];
+  }
+}
+
+function createCustomerDisplay() {
+  const displays = screen.getAllDisplays();
+  console.log('Available displays:', displays.length);
+  
+  let externalDisplay = displays.find(display => display.bounds.x !== 0 || display.bounds.y !== 0);
+  
+  if (!externalDisplay && displays.length > 1) {
+    externalDisplay = displays[1];
+  }
+  
+  const targetDisplay = externalDisplay || displays[0];
+  console.log('Customer display on:', targetDisplay.bounds);
+  
+  customerWindow = new BrowserWindow({
+    x: targetDisplay.bounds.x,
+    y: targetDisplay.bounds.y,
+    width: targetDisplay.bounds.width,
+    height: targetDisplay.bounds.height,
+    fullscreen: true,
+    frame: false,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  const customerDisplayPath = path.join(process.env.SHAMROCK_STATIC_DIR || __dirname, 'customer-display.html');
+  customerWindow.loadFile(customerDisplayPath);
+  
+  customerWindow.on('closed', () => {
+    customerWindow = null;
+  });
+  
+  customerWindow.webContents.on('did-finish-load', () => {
+    const images = getMarketingImages();
+    customerWindow.webContents.send('marketing-images', images);
   });
 }
 
@@ -177,6 +251,9 @@ app.whenReady().then(async () => {
   if (serverReady) {
     console.log('Server is responding, creating window...');
     createWindow();
+    setTimeout(() => {
+      createCustomerDisplay();
+    }, 1000);
   } else {
     console.error('Server failed to respond after multiple attempts');
     createWindow();
@@ -262,4 +339,16 @@ ipcMain.handle('check-for-updates', async () => {
 
 ipcMain.handle('get-app-version', async () => {
   return { version: app.getVersion() };
+});
+
+ipcMain.handle('update-customer-cart', async (event, cartData) => {
+  try {
+    if (customerWindow && !customerWindow.isDestroyed()) {
+      customerWindow.webContents.send('cart-update', cartData);
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error('Customer cart update error:', err.message);
+    return { ok: false, error: err.message };
+  }
 });

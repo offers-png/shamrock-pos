@@ -10,6 +10,14 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes (December 2024)
 
+- **v1.0.25 Customer Display**: Added customer-facing second screen support
+  - Second Electron window opens automatically on the second monitor (Volcora dual display)
+  - Left side: Shows cart items, quantity, and running total (syncs live with POS)
+  - Right side: Marketing slideshow - just drop images in the `marketing-images` folder
+  - Images rotate every 5 seconds automatically
+  - No coding needed to manage marketing content
+- **v1.0.24 Google Credentials Fix**: Fixed credentials path for Windows POS
+  - Checks multiple credential sources including C:\pos-secrets\google-creds.json
 - **v1.0.23 Search Focus Fix**: Fixed focus returning to search bar after selecting a product
   - Search bar regains focus after closing search results popup
   - Scanning can resume immediately after product selection
