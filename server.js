@@ -27,23 +27,28 @@ let sheetsApi = null;
 async function initGoogleSheets() {
   try {
     let credentials = null;
+    let credSource = null;
     
-    // Method 1: Try environment variable first (for Replit/secure deployments)
+    // Method 1: Try environment variable JSON first (for Replit)
     if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
-      console.log("Using Google credentials from environment variable");
+      console.log("Using Google credentials from GOOGLE_APPLICATION_CREDENTIALS_JSON env var");
       credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+      credSource = "env_json";
     } else {
-      // Method 2: Try credentials file (for packaged Windows app)
+      // Method 2: Try keyFile paths (for Windows POS)
       const possiblePaths = [
+        process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        "C:\\pos-secrets\\google-creds.json",
         path.join(process.env.SHAMROCK_RESOURCES_DIR || __dirname, "google-credentials.json"),
         path.join(__dirname, "google-credentials.json"),
         path.join(process.resourcesPath || __dirname, "google-credentials.json")
-      ];
+      ].filter(Boolean);
       
       for (const p of possiblePaths) {
         if (fs.existsSync(p)) {
           console.log("Using Google credentials from file:", p);
           credentials = JSON.parse(fs.readFileSync(p, "utf-8"));
+          credSource = "file";
           break;
         }
       }
@@ -51,7 +56,7 @@ async function initGoogleSheets() {
     
     if (!credentials) {
       console.log("Google credentials not found - Sheets sync disabled");
-      console.log("Set GOOGLE_APPLICATION_CREDENTIALS_JSON env var or place google-credentials.json file");
+      console.log("Place credentials at C:\\pos-secrets\\google-creds.json or set GOOGLE_APPLICATION_CREDENTIALS_JSON env var");
       return null;
     }
     
@@ -61,7 +66,7 @@ async function initGoogleSheets() {
     });
     
     sheetsApi = google.sheets({ version: "v4", auth });
-    console.log("Google Sheets API initialized successfully");
+    console.log("Google Sheets API initialized successfully from:", credSource);
     return sheetsApi;
   } catch (err) {
     console.error("Failed to initialize Google Sheets:", err.message);
