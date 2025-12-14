@@ -511,6 +511,14 @@
               </svg>
               Refresh Products
             </button>
+            <button id="testAutoPrintBtn" class="btn btn-outline" style="background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%); color: white; border: none;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 6 2 18 2 18 9"/>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                <rect width="12" height="8" x="6" y="14"/>
+              </svg>
+              Test Auto Print EOD
+            </button>
           </div>
         </div>
       </div>
@@ -603,6 +611,63 @@
       showToast("Refreshing products...");
       await loadStatus();
       showToast("Products refreshed!");
+    });
+
+    document.getElementById("testAutoPrintBtn").addEventListener("click", async () => {
+      showToast("Generating EOD report...");
+      try {
+        const res = await fetch("/api/eod-today");
+        const data = await res.json();
+        if (data.success) {
+          const t = data.totals || {};
+          const c = data.counts || {};
+          const grand = data.grandTotal || 0;
+          const txCount = data.transactionCount || 0;
+          
+          const padLeft = (str, len) => String(str).padStart(len);
+          const padRight = (str, len) => String(str).padEnd(len);
+          const formatMoney = (n) => "$" + Number(n || 0).toFixed(2);
+          const formatRow = (label, amount, count) => padRight(label, 12) + padLeft(count, 6) + padLeft(formatMoney(amount), 12);
+          const line = "-".repeat(30);
+          
+          const reportText = [
+            '    Shamrock Market',
+            ' ' + new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString(),
+            '  *** End of Day ***',
+            '   (Test Print)',
+            '',
+            line,
+            padRight('Type', 12) + padLeft('#Trn', 6) + padLeft('Amount', 12),
+            line,
+            formatRow('Cash', t["Cash"] || 0, c["Cash"] || 0),
+            formatRow('Debit', t["Debit"] || 0, c["Debit"] || 0),
+            formatRow('EBT', t["EBT"] || 0, c["EBT"] || 0),
+            line,
+            formatRow('TOTAL', grand, txCount),
+            line,
+            '',
+            '     Thank you!'
+          ].join('\n');
+          
+          const reportHtml = '<html><head><style>body{font-family:monospace;font-size:12px;width:280px;margin:0;padding:8px;}</style></head><body><pre>' + reportText + '</pre></body></html>';
+          
+          if (window.electronAPI && window.electronAPI.printReceipt) {
+            await window.electronAPI.printReceipt({ html: reportHtml });
+            showToast("Test EOD printed to receipt printer!");
+          } else {
+            const printWindow = window.open("", "", "height=600,width=400");
+            printWindow.document.write(reportHtml);
+            printWindow.document.close();
+            printWindow.print();
+            showToast("Test EOD print dialog opened!");
+          }
+        } else {
+          showToast("No sales data to print", true);
+        }
+      } catch (err) {
+        console.error("Test print failed:", err);
+        showToast("Test print failed: " + err.message, true);
+      }
     });
 
     document.getElementById("saveBtn").addEventListener("click", () => {
