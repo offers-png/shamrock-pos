@@ -2774,16 +2774,16 @@
           
           if (data.success && data.reports.length > 0) {
             historyList.innerHTML = data.reports.map(r => `
-              <div class="history-item" onclick="showHistoryReport('${r.report_date}')" style="padding: 0.75rem; background: var(--bg-tertiary); border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+              <div class="history-item" onclick="showHistoryReport('${r.report_date}')" style="padding: 0.75rem; background: #2a3550; border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                  <div style="font-weight: 600;">${new Date(r.report_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
-                  <div style="font-size: 0.85rem; color: var(--text-secondary);">${r.transaction_count} transactions</div>
+                  <div style="font-weight: 600; color: #fff;">${new Date(r.report_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                  <div style="font-size: 0.85rem; color: #a0a5b8;">${r.transaction_count} transactions</div>
                 </div>
-                <div style="font-weight: 600; color: var(--success-color);">$${(r.total_sales || 0).toFixed(2)}</div>
+                <div style="font-weight: 600; color: #00d9a5;">$${(r.total_sales || 0).toFixed(2)}</div>
               </div>
             `).join('');
           } else {
-            historyList.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--text-secondary);">No saved reports yet. Reports are saved when you print EOD.</div>';
+            historyList.innerHTML = '<div style="padding: 1rem; text-align: center; color: #a0a5b8;">No saved reports yet. Reports are saved when you print EOD.</div>';
           }
         } else {
           // Go back to today's view
@@ -2823,22 +2823,22 @@
           titleEl.textContent = `Report: ${new Date(r.report_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`;
           
           summaryEl.innerHTML = `
-            <table class="eod-table" style="width: 100%; border-collapse: collapse;">
+            <table class="eod-table" style="width: 100%; border-collapse: collapse; font-family: 'Courier New', monospace; color: #fff;">
               <thead>
-                <tr>
-                  <th style="text-align: left; padding: 0.5rem;">Type</th>
-                  <th style="text-align: right; padding: 0.5rem;">#Trn</th>
-                  <th style="text-align: right; padding: 0.5rem;">$Amount</th>
+                <tr style="border-bottom: 2px solid #555;">
+                  <th style="text-align: left; padding: 8px; color: #fff;">Type</th>
+                  <th style="text-align: center; padding: 8px; color: #fff;">#Trn</th>
+                  <th style="text-align: right; padding: 8px; color: #fff;">$Amount</th>
                 </tr>
               </thead>
               <tbody>
-                <tr><td style="padding: 0.5rem;">Cash</td><td style="text-align: right; padding: 0.5rem;">-</td><td style="text-align: right; padding: 0.5rem;">$${(r.cash_sales || 0).toFixed(2)}</td></tr>
-                <tr><td style="padding: 0.5rem;">Debit Card</td><td style="text-align: right; padding: 0.5rem;">-</td><td style="text-align: right; padding: 0.5rem;">$${(r.card_sales || 0).toFixed(2)}</td></tr>
-                <tr><td style="padding: 0.5rem;">EBT</td><td style="text-align: right; padding: 0.5rem;">-</td><td style="text-align: right; padding: 0.5rem;">$${(r.ebt_sales || 0).toFixed(2)}</td></tr>
-                <tr style="font-weight: bold; border-top: 2px solid var(--border-color);">
-                  <td style="padding: 0.5rem;">TOTAL</td>
-                  <td style="text-align: right; padding: 0.5rem;">${r.transaction_count || 0}</td>
-                  <td style="text-align: right; padding: 0.5rem;">$${(r.total_sales || 0).toFixed(2)}</td>
+                <tr style="border-bottom: 1px dashed #555;"><td style="padding: 8px; color: #fff;">Cash</td><td style="text-align: center; padding: 8px; color: #fff;">-</td><td style="text-align: right; padding: 8px; color: #fff;">$${(r.cash_sales || 0).toFixed(2)}</td></tr>
+                <tr style="border-bottom: 1px dashed #555;"><td style="padding: 8px; color: #fff;">Debit Card</td><td style="text-align: center; padding: 8px; color: #fff;">-</td><td style="text-align: right; padding: 8px; color: #fff;">$${(r.card_sales || 0).toFixed(2)}</td></tr>
+                <tr style="border-bottom: 1px dashed #555;"><td style="padding: 8px; color: #fff;">EBT</td><td style="text-align: center; padding: 8px; color: #fff;">-</td><td style="text-align: right; padding: 8px; color: #fff;">$${(r.ebt_sales || 0).toFixed(2)}</td></tr>
+                <tr style="font-weight: bold; border-top: 2px solid #fff;">
+                  <td style="padding: 8px; color: #fff;">TOTAL</td>
+                  <td style="text-align: center; padding: 8px; color: #fff;">${r.transaction_count || 0}</td>
+                  <td style="text-align: right; padding: 8px; color: #fff;">$${(r.total_sales || 0).toFixed(2)}</td>
                 </tr>
               </tbody>
             </table>
