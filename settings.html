@@ -661,6 +661,14 @@
             printWindow.print();
             showToast("Test EOD print dialog opened!");
           }
+          
+          // Save to report history
+          try {
+            await fetch("/api/daily-reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+            console.log("Saved EOD report to history");
+          } catch (saveErr) {
+            console.error("Failed to save EOD report:", saveErr);
+          }
         } else {
           showToast("No sales data to print", true);
         }
