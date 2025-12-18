@@ -2938,10 +2938,19 @@
       }
     }
 
+    // Track which date we last auto-printed for (prevents duplicate prints)
+    let lastAutoPrintDate = localStorage.getItem('lastAutoPrintDate') || '';
+
     function setupAutoPrintTimer() {
       setInterval(() => {
         const now = new Date();
-        if (now.getHours() === 23 && now.getMinutes() === 59 && now.getSeconds() === 0) {
+        const todayStr = now.toISOString().split('T')[0];
+        
+        // Trigger at 11:59 PM (any second during that minute) if we haven't printed today
+        if (now.getHours() === 23 && now.getMinutes() === 59 && lastAutoPrintDate !== todayStr) {
+          console.log("Auto-print triggered at 11:59 PM for date: " + todayStr);
+          lastAutoPrintDate = todayStr;
+          localStorage.setItem('lastAutoPrintDate', todayStr);
           autoGenerateAndPrintEod();
         }
       }, 1000);
