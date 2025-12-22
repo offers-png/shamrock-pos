@@ -172,6 +172,7 @@ async function initDatabase() {
       cash_sales REAL DEFAULT 0,
       card_sales REAL DEFAULT 0,
       ebt_sales REAL DEFAULT 0,
+      store_credit_sales REAL DEFAULT 0,
       tax_collected REAL DEFAULT 0,
       transaction_count INTEGER DEFAULT 0,
       refund_total REAL DEFAULT 0,
@@ -180,6 +181,14 @@ async function initDatabase() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  
+  const tableInfo = db.exec("PRAGMA table_info(daily_reports)");
+  if (tableInfo.length > 0) {
+    const columns = tableInfo[0].values.map(row => row[1]);
+    if (!columns.includes('store_credit_sales')) {
+      try { db.run(`ALTER TABLE daily_reports ADD COLUMN store_credit_sales REAL DEFAULT 0`); } catch(e) {}
+    }
+  }
 
   try { db.run(`CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)`); } catch(e) {}
   try { db.run(`CREATE INDEX IF NOT EXISTS idx_products_category ON products(category)`); } catch(e) {}
@@ -647,13 +656,13 @@ const settingsRepo = {
 const dailyReportsRepo = {
   async save(reportData) {
     const db = await getDb();
-    const { report_date, total_sales, cash_sales, card_sales, ebt_sales, tax_collected, transaction_count, refund_total, report_data, created_by } = reportData;
-    db.run(`INSERT INTO daily_reports (report_date, total_sales, cash_sales, card_sales, ebt_sales, tax_collected, transaction_count, refund_total, report_data, created_by) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+    const { report_date, total_sales, cash_sales, card_sales, ebt_sales, store_credit_sales, tax_collected, transaction_count, refund_total, report_data, created_by } = reportData;
+    db.run(`INSERT INTO daily_reports (report_date, total_sales, cash_sales, card_sales, ebt_sales, store_credit_sales, tax_collected, transaction_count, refund_total, report_data, created_by) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
             ON CONFLICT(report_date) DO UPDATE SET 
-            total_sales = ?, cash_sales = ?, card_sales = ?, ebt_sales = ?, tax_collected = ?, transaction_count = ?, refund_total = ?, report_data = ?`,
-      [report_date, total_sales, cash_sales, card_sales, ebt_sales, tax_collected, transaction_count, refund_total, report_data, created_by,
-       total_sales, cash_sales, card_sales, ebt_sales, tax_collected, transaction_count, refund_total, report_data]);
+            total_sales = ?, cash_sales = ?, card_sales = ?, ebt_sales = ?, store_credit_sales = ?, tax_collected = ?, transaction_count = ?, refund_total = ?, report_data = ?`,
+      [report_date, total_sales, cash_sales, card_sales, ebt_sales, store_credit_sales || 0, tax_collected, transaction_count, refund_total, report_data, created_by,
+       total_sales, cash_sales, card_sales, ebt_sales, store_credit_sales || 0, tax_collected, transaction_count, refund_total, report_data]);
     saveDb();
     return true;
   },

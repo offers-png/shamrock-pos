@@ -501,16 +501,30 @@ app.post("/api/daily-reports", async (req, res) => {
     const summary = await salesRepo.getDailySummary();
     const today = new Date().toISOString().split('T')[0];
     
+    const sales = await salesRepo.getTodaySales();
+    const counts = { Cash: 0, "Debit Card": 0, EBT: 0, "Store Credit": 0 };
+    for (const sale of sales) {
+      if (counts[sale.payment_type] !== undefined) {
+        counts[sale.payment_type]++;
+      }
+    }
+    
+    const fullReportData = {
+      ...summary,
+      counts
+    };
+    
     const reportData = {
       report_date: today,
       total_sales: summary.total_sales || 0,
       cash_sales: summary.cash_total || 0,
       card_sales: summary.card_total || 0,
       ebt_sales: summary.ebt_total || 0,
+      store_credit_sales: summary.store_credit_total || 0,
       tax_collected: summary.total_tax || 0,
       transaction_count: summary.transaction_count || 0,
       refund_total: 0,
-      report_data: JSON.stringify(summary),
+      report_data: JSON.stringify(fullReportData),
       created_by: req.body.userId || null
     };
     

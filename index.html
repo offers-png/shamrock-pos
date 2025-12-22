@@ -2763,6 +2763,7 @@
         
         if (summaryEl.style.display !== "none") {
           // Show history view
+          viewingHistoricalReport = null;
           summaryEl.style.display = "none";
           historyView.style.display = "block";
           titleEl.textContent = "Report History (7 Days)";
@@ -2788,6 +2789,7 @@
           }
         } else {
           // Go back to today's view
+          viewingHistoricalReport = null;
           summaryEl.style.display = "block";
           historyView.style.display = "none";
           titleEl.textContent = "End of Day Report";
@@ -2815,13 +2817,41 @@
           const r = data.report;
           const reportData = r.report_data ? JSON.parse(r.report_data) : {};
           
+          const storedCounts = reportData.counts || {};
+          
+          const safeNum = (val) => {
+            const n = Number(val);
+            return isNaN(n) ? 0 : n;
+          };
+          
+          viewingHistoricalReport = {
+            date: r.report_date,
+            displayDate: new Date(r.report_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+            cash: safeNum(reportData.cash_total !== undefined ? reportData.cash_total : r.cash_sales),
+            card: safeNum(reportData.card_total !== undefined ? reportData.card_total : r.card_sales),
+            ebt: safeNum(reportData.ebt_total !== undefined ? reportData.ebt_total : r.ebt_sales),
+            storeCredit: safeNum(reportData.store_credit_total !== undefined ? reportData.store_credit_total : r.store_credit_sales),
+            total: safeNum(reportData.total_sales !== undefined ? reportData.total_sales : r.total_sales),
+            transactionCount: safeNum(reportData.transaction_count !== undefined ? reportData.transaction_count : r.transaction_count),
+            counts: {
+              Cash: storedCounts.Cash,
+              "Debit Card": storedCounts["Debit Card"],
+              EBT: storedCounts.EBT,
+              "Store Credit": storedCounts["Store Credit"]
+            }
+          };
+          
           const summaryEl = document.getElementById("eodSummary");
           const historyView = document.getElementById("eodHistoryView");
           const titleEl = document.getElementById("eodPanelTitle");
           
           historyView.style.display = "none";
           summaryEl.style.display = "block";
-          titleEl.textContent = `Report: ${new Date(r.report_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`;
+          titleEl.textContent = `Report: ${viewingHistoricalReport.displayDate}`;
+          
+          const h = viewingHistoricalReport;
+          const hc = h.counts || {};
+          const getCountDisplay = (key) => hc[key] !== undefined ? hc[key] : "-";
           
           summaryEl.innerHTML = `
             <table class="eod-table" style="width: 100%; border-collapse: collapse; font-family: 'Courier New', monospace; color: #fff;">
@@ -2833,13 +2863,14 @@
                 </tr>
               </thead>
               <tbody>
-                <tr style="border-bottom: 1px dashed #555;"><td style="padding: 8px; color: #fff;">Cash</td><td style="text-align: center; padding: 8px; color: #fff;">-</td><td style="text-align: right; padding: 8px; color: #fff;">$${(r.cash_sales || 0).toFixed(2)}</td></tr>
-                <tr style="border-bottom: 1px dashed #555;"><td style="padding: 8px; color: #fff;">Debit Card</td><td style="text-align: center; padding: 8px; color: #fff;">-</td><td style="text-align: right; padding: 8px; color: #fff;">$${(r.card_sales || 0).toFixed(2)}</td></tr>
-                <tr style="border-bottom: 1px dashed #555;"><td style="padding: 8px; color: #fff;">EBT</td><td style="text-align: center; padding: 8px; color: #fff;">-</td><td style="text-align: right; padding: 8px; color: #fff;">$${(r.ebt_sales || 0).toFixed(2)}</td></tr>
+                <tr style="border-bottom: 1px dashed #555;"><td style="padding: 8px; color: #fff;">Cash</td><td style="text-align: center; padding: 8px; color: #fff;">${getCountDisplay("Cash")}</td><td style="text-align: right; padding: 8px; color: #fff;">$${h.cash.toFixed(2)}</td></tr>
+                <tr style="border-bottom: 1px dashed #555;"><td style="padding: 8px; color: #fff;">Debit Card</td><td style="text-align: center; padding: 8px; color: #fff;">${getCountDisplay("Debit Card")}</td><td style="text-align: right; padding: 8px; color: #fff;">$${h.card.toFixed(2)}</td></tr>
+                <tr style="border-bottom: 1px dashed #555;"><td style="padding: 8px; color: #fff;">EBT</td><td style="text-align: center; padding: 8px; color: #fff;">${getCountDisplay("EBT")}</td><td style="text-align: right; padding: 8px; color: #fff;">$${h.ebt.toFixed(2)}</td></tr>
+                <tr style="border-bottom: 1px dashed #555;"><td style="padding: 8px; color: #fff;">Store Credit</td><td style="text-align: center; padding: 8px; color: #fff;">${getCountDisplay("Store Credit")}</td><td style="text-align: right; padding: 8px; color: #fff;">$${h.storeCredit.toFixed(2)}</td></tr>
                 <tr style="font-weight: bold; border-top: 2px solid #fff;">
                   <td style="padding: 8px; color: #fff;">TOTAL</td>
-                  <td style="text-align: center; padding: 8px; color: #fff;">${r.transaction_count || 0}</td>
-                  <td style="text-align: right; padding: 8px; color: #fff;">$${(r.total_sales || 0).toFixed(2)}</td>
+                  <td style="text-align: center; padding: 8px; color: #fff;">${h.transactionCount}</td>
+                  <td style="text-align: right; padding: 8px; color: #fff;">$${h.total.toFixed(2)}</td>
                 </tr>
               </tbody>
             </table>
@@ -2855,25 +2886,50 @@
 
     async function printEodReport() {
       try {
-        const res = await fetch("/api/eod-today");
-        const data = await res.json();
-        if (!data.success) {
-          showToast("No report data to print", true);
-          return;
+        let t, c, grand, txCount, reportDate, reportTime;
+        
+        const safeNum = (val) => {
+          const n = Number(val);
+          return isNaN(n) ? 0 : n;
+        };
+        
+        if (viewingHistoricalReport) {
+          t = {
+            "Cash": safeNum(viewingHistoricalReport.cash),
+            "Debit Card": safeNum(viewingHistoricalReport.card),
+            "EBT": safeNum(viewingHistoricalReport.ebt),
+            "Store Credit": safeNum(viewingHistoricalReport.storeCredit)
+          };
+          const hCounts = viewingHistoricalReport.counts || {};
+          c = {
+            "Cash": hCounts.Cash !== undefined ? hCounts.Cash : "-",
+            "Debit Card": hCounts["Debit Card"] !== undefined ? hCounts["Debit Card"] : "-",
+            "EBT": hCounts.EBT !== undefined ? hCounts.EBT : "-",
+            "Store Credit": hCounts["Store Credit"] !== undefined ? hCounts["Store Credit"] : "-"
+          };
+          grand = safeNum(viewingHistoricalReport.total);
+          txCount = safeNum(viewingHistoricalReport.transactionCount);
+          reportDate = new Date(viewingHistoricalReport.date + 'T12:00:00').toLocaleDateString();
+          reportTime = "(Historical)";
+        } else {
+          const res = await fetch("/api/eod-today");
+          const data = await res.json();
+          if (!data.success) {
+            showToast("No report data to print", true);
+            return;
+          }
+          t = data.totals || {};
+          c = data.counts || {};
+          grand = data.grandTotal || 0;
+          txCount = data.transactionCount || 0;
+          reportDate = new Date().toLocaleDateString();
+          reportTime = new Date().toLocaleTimeString();
         }
         
-        const t = data.totals || {};
-        const c = data.counts || {};
-        const grand = data.grandTotal || 0;
-        const txCount = data.transactionCount || 0;
-        
-        // Helper to pad strings for fixed-width columns (32 char thermal paper)
         const padLeft = (str, len) => String(str).padStart(len);
         const padRight = (str, len) => String(str).padEnd(len);
         const formatMoney = (amt) => '$' + (amt || 0).toFixed(2);
         
-        // Build fixed-width text report (32 chars to fit 80mm paper)
-        // Columns: Type(12) + #Trn(6) + Amount(10) = 28 chars + some padding
         const line = '-'.repeat(30);
         const dblLine = '='.repeat(30);
         
@@ -2881,25 +2937,29 @@
           return padRight(type, 12) + padLeft(count, 6) + padLeft(formatMoney(amount), 12);
         };
         
+        const getCount = (key) => {
+          const val = c[key];
+          return val === "-" ? "-" : (val || 0);
+        };
+        
         const reportText = [
           '    Shamrock Market',
-          ' ' + new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString(),
+          ' ' + reportDate + ' ' + reportTime,
           '  *** End of Day ***',
           '',
           line,
           padRight('Type', 12) + padLeft('#Trn', 6) + padLeft('Amount', 12),
           line,
-          formatRow('Cash', c["Cash"] || 0, t["Cash"] || 0),
-          formatRow('Debit', c["Debit Card"] || 0, t["Debit Card"] || 0),
-          formatRow('EBT', c["EBT"] || 0, t["EBT"] || 0),
-          formatRow('StoreCred', c["Store Credit"] || 0, t["Store Credit"] || 0),
+          formatRow('Cash', getCount("Cash"), t["Cash"] || 0),
+          formatRow('Debit', getCount("Debit Card"), t["Debit Card"] || 0),
+          formatRow('EBT', getCount("EBT"), t["EBT"] || 0),
+          formatRow('StoreCred', getCount("Store Credit"), t["Store Credit"] || 0),
           dblLine,
           formatRow('TOTAL', txCount, grand),
           '',
           ''
         ].join('\n');
         
-        // Use <pre> tag for fixed-width text printing
         const reportHtml = `
           <html>
           <head>
@@ -2926,12 +2986,13 @@
           showToast("Report sent to printer");
         }
         
-        // Save the daily report to database for history
-        try {
-          await fetch("/api/daily-reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
-          console.log("Saved EOD report to database");
-        } catch (saveErr) {
-          console.error("Failed to save EOD report:", saveErr);
+        if (!viewingHistoricalReport) {
+          try {
+            await fetch("/api/daily-reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+            console.log("Saved EOD report to database");
+          } catch (saveErr) {
+            console.error("Failed to save EOD report:", saveErr);
+          }
         }
       } catch (err) {
         console.error("Print error:", err);
