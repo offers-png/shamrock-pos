@@ -1535,22 +1535,41 @@
   </div>
 
   <div class="id-check-modal" id="idCheckModal">
-    <div class="id-check-content">
+    <div class="id-check-content" style="max-width: 420px;">
       <div class="id-check-icon">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
         </svg>
       </div>
-      <div class="id-check-title">CHECK ID</div>
+      <div class="id-check-title">CHECK ID - 21+</div>
       <div class="id-check-subtitle">Age-restricted item requires ID verification</div>
       <div class="id-check-cutoff" id="idCheckCutoff" style="font-size: 1.1rem; font-weight: 600; color: #dc2626; margin: 0.75rem 0; padding: 0.5rem; background: rgba(220, 38, 38, 0.1); border-radius: 8px;"></div>
       <div class="id-check-product">
         <div class="id-check-product-name" id="idCheckProductName"></div>
         <div class="id-check-product-category" id="idCheckProductCategory"></div>
       </div>
-      <div class="id-check-buttons">
-        <button class="id-check-btn deny" id="idCheckDeny">Cancel</button>
-        <button class="id-check-btn approve" id="idCheckApprove">ID Verified</button>
+      
+      <div style="margin: 1rem 0; display: flex; flex-direction: column; gap: 0.75rem;">
+        <div style="font-weight: 600; color: var(--text-primary); font-size: 0.95rem;">Option 1: Scan ID Barcode</div>
+        <input type="text" id="idScanInput" placeholder="Scan driver's license barcode..." 
+               style="padding: 0.75rem; border: 2px solid var(--border-color); border-radius: 8px; font-size: 1rem; background: var(--bg-secondary); color: var(--text-primary);">
+        
+        <div style="text-align: center; color: var(--text-secondary); font-size: 0.85rem; margin: 0.25rem 0;">— OR —</div>
+        
+        <div style="font-weight: 600; color: var(--text-primary); font-size: 0.95rem;">Option 2: Enter Date of Birth</div>
+        <input type="date" id="idDobInput" 
+               style="padding: 0.75rem; border: 2px solid var(--border-color); border-radius: 8px; font-size: 1rem; background: var(--bg-secondary); color: var(--text-primary);">
+        
+        <button class="id-check-btn approve" id="idCheckVerifyDob" style="margin-top: 0.5rem;">
+          Verify Age
+        </button>
+      </div>
+      
+      <div id="idCheckResult" style="display: none; padding: 0.75rem; border-radius: 8px; margin: 0.5rem 0; font-weight: 600; text-align: center;"></div>
+      
+      <div class="id-check-buttons" style="margin-top: 0.5rem;">
+        <button class="id-check-btn deny" id="idCheckDeny">Cancel Sale</button>
+        <button class="id-check-btn approve" id="idCheckApprove" style="display: none;">Proceed with Sale</button>
       </div>
     </div>
   </div>
@@ -1893,16 +1912,143 @@
       return cutoff.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     }
 
+    function calculateAge(dob) {
+      const today = new Date();
+      const birthDate = new Date(dob);
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      return age;
+    }
+
+    function parsePDF417DOB(barcodeData) {
+      const patterns = [
+        /DBB(\d{8})/,
+        /DBB(\d{2})(\d{2})(\d{4})/,
+        /DAQ.*DBB(\d{8})/,
+      ];
+      for (const pattern of patterns) {
+        const match = barcodeData.match(pattern);
+        if (match) {
+          if (match.length === 4) {
+            const [, mm, dd, yyyy] = match;
+            return `${yyyy}-${mm}-${dd}`;
+          } else if (match[1] && match[1].length === 8) {
+            const dateStr = match[1];
+            const mm = dateStr.substring(0, 2);
+            const dd = dateStr.substring(2, 4);
+            const yyyy = dateStr.substring(4, 8);
+            return `${yyyy}-${mm}-${dd}`;
+          }
+        }
+      }
+      return null;
+    }
+
+    let idCheckVerified = false;
+    let idCheckDob = null;
+    let idCheckAge = null;
+
+    function resetIdCheckModal() {
+      idCheckVerified = false;
+      idCheckDob = null;
+      idCheckAge = null;
+      document.getElementById("idScanInput").value = "";
+      document.getElementById("idDobInput").value = "";
+      document.getElementById("idCheckResult").style.display = "none";
+      document.getElementById("idCheckApprove").style.display = "none";
+    }
+
     function showIdCheck(product) {
       pendingAgeRestrictedProduct = product;
+      resetIdCheckModal();
       document.getElementById("idCheckProductName").textContent = product.name;
       document.getElementById("idCheckProductCategory").textContent = product.category + " - Age 21+ Required";
       document.getElementById("idCheckCutoff").textContent = "Must be born on or before: " + getAge21Cutoff();
       idCheckModal.classList.add("show");
+      setTimeout(() => document.getElementById("idScanInput").focus(), 100);
     }
 
+    function verifyAge(dob, checkType) {
+      const age = calculateAge(dob);
+      idCheckAge = age;
+      idCheckDob = dob;
+      const resultDiv = document.getElementById("idCheckResult");
+      const approveBtn = document.getElementById("idCheckApprove");
+
+      if (age >= 21) {
+        idCheckVerified = true;
+        resultDiv.style.display = "block";
+        resultDiv.style.background = "rgba(34, 197, 94, 0.15)";
+        resultDiv.style.color = "#22c55e";
+        resultDiv.textContent = `APPROVED - Age ${age} (DOB: ${new Date(dob).toLocaleDateString()})`;
+        approveBtn.style.display = "block";
+        logIdCheck(checkType, dob, age, true);
+      } else {
+        idCheckVerified = false;
+        resultDiv.style.display = "block";
+        resultDiv.style.background = "rgba(239, 68, 68, 0.15)";
+        resultDiv.style.color = "#ef4444";
+        resultDiv.textContent = `DENIED - Age ${age} (Must be 21+)`;
+        approveBtn.style.display = "none";
+        logIdCheck(checkType, dob, age, false);
+      }
+    }
+
+    async function logIdCheck(checkType, dob, age, verified) {
+      try {
+        await fetch("/api/id-checks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            check_type: checkType,
+            dob: dob,
+            age: age,
+            verified: verified,
+            min_age_required: 21,
+            notes: pendingAgeRestrictedProduct ? pendingAgeRestrictedProduct.name : null
+          })
+        });
+      } catch (e) {
+        console.error("Failed to log ID check:", e);
+      }
+    }
+
+    document.getElementById("idScanInput").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        const scanData = e.target.value.trim();
+        const dob = parsePDF417DOB(scanData);
+        if (dob) {
+          verifyAge(dob, "scan");
+        } else {
+          const resultDiv = document.getElementById("idCheckResult");
+          resultDiv.style.display = "block";
+          resultDiv.style.background = "rgba(239, 68, 68, 0.15)";
+          resultDiv.style.color = "#ef4444";
+          resultDiv.textContent = "Could not read ID - Please enter DOB manually";
+        }
+      }
+    });
+
+    document.getElementById("idCheckVerifyDob").addEventListener("click", () => {
+      const dobInput = document.getElementById("idDobInput").value;
+      if (!dobInput) {
+        showToast("Please enter a date of birth", true);
+        return;
+      }
+      verifyAge(dobInput, "manual");
+    });
+
+    document.getElementById("idDobInput").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        document.getElementById("idCheckVerifyDob").click();
+      }
+    });
+
     document.getElementById("idCheckApprove").addEventListener("click", () => {
-      if (pendingAgeRestrictedProduct) {
+      if (pendingAgeRestrictedProduct && idCheckVerified) {
         addToCart(pendingAgeRestrictedProduct, pendingQty);
         showToast(`Added: ${pendingAgeRestrictedProduct.name}`);
         pendingAgeRestrictedProduct = null;

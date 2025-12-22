@@ -12,6 +12,7 @@ const {
   shiftRepo, 
   settingsRepo,
   dailyReportsRepo,
+  idChecksRepo,
   getDb,
   saveDb,
   dbPath 
@@ -458,6 +459,26 @@ app.post("/api/sales/:saleId/void", async (req, res) => {
   try {
     await salesRepo.voidSale(saleId, reason, userId);
     res.json({ success: true, message: "Sale voided" });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/id-checks", async (req, res) => {
+  try {
+    const { check_type, dob, age, verified, min_age_required, user_id, shift_id, sale_id, notes } = req.body;
+    await idChecksRepo.log({ check_type, dob, age, verified, min_age_required, user_id, shift_id, sale_id, notes });
+    res.json({ success: true, message: "ID check logged" });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/id-checks", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const checks = await idChecksRepo.getRecent(limit);
+    res.json({ success: true, checks });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

@@ -181,6 +181,22 @@ async function initDatabase() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS id_checks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      check_type TEXT NOT NULL,
+      dob TEXT,
+      age INTEGER,
+      verified INTEGER DEFAULT 0,
+      min_age_required INTEGER DEFAULT 21,
+      user_id INTEGER,
+      shift_id INTEGER,
+      sale_id TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
   
   const tableInfo = db.exec("PRAGMA table_info(daily_reports)");
   if (tableInfo.length > 0) {
@@ -705,6 +721,30 @@ const dailyReportsRepo = {
   }
 };
 
+const idChecksRepo = {
+  async log(checkData) {
+    const db = await getDb();
+    const { check_type, dob, age, verified, min_age_required, user_id, shift_id, sale_id, notes } = checkData;
+    db.run(`INSERT INTO id_checks (check_type, dob, age, verified, min_age_required, user_id, shift_id, sale_id, notes) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [check_type, dob, age, verified ? 1 : 0, min_age_required || 21, user_id, shift_id, sale_id, notes]);
+    saveDb();
+    return true;
+  },
+
+  async getRecent(limit = 100) {
+    const db = await getDb();
+    const result = db.exec(`SELECT * FROM id_checks ORDER BY created_at DESC LIMIT ${limit}`);
+    if (!result.length) return [];
+    const columns = result[0].columns;
+    return result[0].values.map(row => {
+      const obj = {};
+      columns.forEach((c, i) => obj[c] = row[i]);
+      return obj;
+    });
+  }
+};
+
 function rowToProduct(columns, row) {
   const obj = {};
   columns.forEach((c, i) => obj[c] = row[i]);
@@ -742,5 +782,6 @@ module.exports = {
   shiftRepo,
   settingsRepo,
   dailyReportsRepo,
+  idChecksRepo,
   dbPath
 };
