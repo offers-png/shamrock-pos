@@ -2170,24 +2170,49 @@
     function getEbtSplit() {
       let ebtSubtotal = 0;
       let nonEbtSubtotal = 0;
+      let totalSubtotal = 0;
+      
       cart.forEach(item => {
         const itemTotal = item.price * item.qty;
+        totalSubtotal += itemTotal;
         if (isEbtEligible(item)) {
           ebtSubtotal += itemTotal;
         } else {
           nonEbtSubtotal += itemTotal;
         }
       });
-      return { ebtSubtotal, nonEbtSubtotal };
+      
+      const discountRatio = discountPercentage / 100;
+      const ebtAfterDiscount = ebtSubtotal * (1 - discountRatio);
+      const nonEbtAfterDiscount = nonEbtSubtotal * (1 - discountRatio);
+      
+      const taxRate = taxEnabled ? BASE_TAX_RATE : 0;
+      const nonEbtWithTax = nonEbtAfterDiscount * (1 + taxRate);
+      
+      return { 
+        ebtSubtotal, 
+        nonEbtSubtotal,
+        ebtAmount: ebtAfterDiscount,
+        nonEbtAmount: nonEbtWithTax,
+        ebtDiscount: ebtSubtotal * discountRatio,
+        nonEbtDiscount: nonEbtSubtotal * discountRatio,
+        nonEbtTax: nonEbtAfterDiscount * taxRate
+      };
     }
 
     function updateTotals() {
+      const split = getEbtSplit();
       let subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
       let discountAmount = subtotal * (discountPercentage / 100);
       let afterDiscount = subtotal - discountAmount;
-      let taxRate = taxEnabled ? BASE_TAX_RATE : 0;
-      let tax = afterDiscount * taxRate;
-      let total = afterDiscount + tax;
+      
+      let tax = taxEnabled ? split.nonEbtTax : 0;
+      let total = split.ebtAmount + split.nonEbtAmount;
+      
+      if (subtotal === 0) {
+        tax = 0;
+        total = 0;
+      }
 
       subtotalSpan.textContent = subtotal.toFixed(2);
       discountAmountSpan.textContent = discountAmount.toFixed(2);
@@ -2195,15 +2220,14 @@
       totalSpan.textContent = total.toFixed(2);
       taxRateLabel.textContent = taxEnabled ? "8" : "0";
 
-      const { ebtSubtotal, nonEbtSubtotal } = getEbtSplit();
       const ebtSplitSection = document.getElementById("ebtSplitSection");
-      const hasEbt = ebtSubtotal > 0;
-      const hasNonEbt = nonEbtSubtotal > 0;
+      const hasEbt = split.ebtSubtotal > 0;
+      const hasNonEbt = split.nonEbtSubtotal > 0;
       
       if (hasEbt && hasNonEbt) {
         ebtSplitSection.style.display = "block";
-        document.getElementById("ebtTotal").textContent = ebtSubtotal.toFixed(2);
-        document.getElementById("nonEbtTotal").textContent = nonEbtSubtotal.toFixed(2);
+        document.getElementById("ebtTotal").textContent = split.ebtAmount.toFixed(2);
+        document.getElementById("nonEbtTotal").textContent = split.nonEbtAmount.toFixed(2);
       } else {
         ebtSplitSection.style.display = "none";
       }
@@ -2409,12 +2433,12 @@
         return;
       }
 
+      const split = getEbtSplit();
       const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
       const discountAmount = subtotal * (discountPercentage / 100);
       const afterDiscount = subtotal - discountAmount;
-      const taxRate = taxEnabled ? BASE_TAX_RATE : 0;
-      const tax = afterDiscount * taxRate;
-      const total = afterDiscount + tax;
+      const tax = taxEnabled ? split.nonEbtTax : 0;
+      const total = split.ebtAmount + split.nonEbtAmount;
 
       const cartCopy = cart.map(item => ({ ...item }));
 
@@ -2481,16 +2505,16 @@
         return;
       }
       
-      const { ebtSubtotal, nonEbtSubtotal } = getEbtSplit();
+      const split = getEbtSplit();
       
-      if (ebtSubtotal === 0) {
+      if (split.ebtSubtotal === 0) {
         showToast("No EBT-eligible items in cart!", true);
         return;
       }
       
-      if (nonEbtSubtotal > 0) {
-        document.getElementById("splitEbtAmount").textContent = ebtSubtotal.toFixed(2);
-        document.getElementById("splitNonEbtAmount").textContent = nonEbtSubtotal.toFixed(2);
+      if (split.nonEbtSubtotal > 0) {
+        document.getElementById("splitEbtAmount").textContent = split.ebtAmount.toFixed(2);
+        document.getElementById("splitNonEbtAmount").textContent = split.nonEbtAmount.toFixed(2);
         document.getElementById("splitPaymentModal").classList.add("show");
       } else {
         completeSaleInstantly("EBT");
@@ -2517,13 +2541,13 @@
         return;
       }
 
-      const { ebtSubtotal, nonEbtSubtotal } = getEbtSplit();
+      const split = getEbtSplit();
       const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
       const discountAmount = subtotal * (discountPercentage / 100);
       const afterDiscount = subtotal - discountAmount;
       const taxRate = taxEnabled ? BASE_TAX_RATE : 0;
       const tax = afterDiscount * taxRate;
-      const total = afterDiscount + tax;
+      const total = split.ebtAmount + split.nonEbtAmount;
 
       const cartCopy = cart.map(item => ({ ...item, ebt_eligible: isEbtEligible(item) }));
       const paymentType = `EBT + ${secondPaymentType}`;
@@ -2534,11 +2558,14 @@
         subtotal,
         discount: discountAmount,
         taxRate: taxEnabled ? 8 : 0,
-        taxAmount: tax,
+        taxAmount: split.nonEbtTax,
         total,
         paymentType,
-        ebtAmount: ebtSubtotal,
-        nonEbtAmount: nonEbtSubtotal,
+        ebtAmount: split.ebtAmount,
+        nonEbtAmount: split.nonEbtAmount,
+        ebtDiscount: split.ebtDiscount,
+        nonEbtDiscount: split.nonEbtDiscount,
+        nonEbtTax: split.nonEbtTax,
         secondPaymentType
       };
 
@@ -2552,10 +2579,10 @@
               paymentType,
               subtotal,
               discount: discountAmount,
-              tax,
+              tax: split.nonEbtTax,
               total,
-              ebtAmount: ebtSubtotal,
-              nonEbtAmount: nonEbtSubtotal,
+              ebtAmount: split.ebtAmount,
+              nonEbtAmount: split.nonEbtAmount,
               clientTimestamp: new Date().toISOString(),
             }),
           });
@@ -2572,17 +2599,17 @@
         }
       })();
 
-      generateSplitReceipt(cartCopy, subtotal, discountAmount, tax, total, ebtSubtotal, nonEbtSubtotal, secondPaymentType);
+      generateSplitReceipt(cartCopy, subtotal, discountAmount, split.nonEbtTax, total, split.ebtAmount, split.nonEbtAmount, secondPaymentType, split.ebtDiscount, split.nonEbtDiscount);
       showPanel(receiptPanel);
       
       clearCart();
       keypadBuffer = "";
       updateKeypadDisplay();
       
-      showToast(`Split payment complete! EBT: $${ebtSubtotal.toFixed(2)}, ${secondPaymentType}: $${nonEbtSubtotal.toFixed(2)}`);
+      showToast(`Split payment complete! EBT: $${split.ebtAmount.toFixed(2)}, ${secondPaymentType}: $${split.nonEbtAmount.toFixed(2)}`);
     }
 
-    function generateSplitReceipt(items, subtotal, discount, tax, total, ebtAmount, nonEbtAmount, secondPaymentType) {
+    function generateSplitReceipt(items, subtotal, discount, tax, total, ebtAmount, nonEbtAmount, secondPaymentType, ebtDiscount = 0, nonEbtDiscount = 0) {
       const now = new Date();
       const dateStr = now.toLocaleDateString();
       const timeStr = now.toLocaleTimeString();
@@ -2598,7 +2625,7 @@
       const nonEbtItems = items.filter(i => !i.ebt_eligible);
       
       if (ebtItems.length > 0) {
-        html += `<div style="font-weight: 600; color: #22c55e; margin: 0.5rem 0;">-- EBT ELIGIBLE --</div>`;
+        html += `<div style="font-weight: 600; color: #22c55e; margin: 0.5rem 0;">-- EBT ELIGIBLE (Tax Exempt) --</div>`;
         ebtItems.forEach(item => {
           html += `<div style="display: flex; justify-content: space-between;">
             <span>${item.qty}x ${item.name}</span>
@@ -2608,7 +2635,7 @@
       }
       
       if (nonEbtItems.length > 0) {
-        html += `<div style="font-weight: 600; color: #f97316; margin: 0.5rem 0;">-- NON-EBT --</div>`;
+        html += `<div style="font-weight: 600; color: #f97316; margin: 0.5rem 0;">-- NON-EBT (Taxable) --</div>`;
         nonEbtItems.forEach(item => {
           html += `<div style="display: flex; justify-content: space-between;">
             <span>${item.qty}x ${item.name}</span>
@@ -2622,7 +2649,7 @@
         <div style="border-top: 1px dashed #444; margin-top: 0.5rem; padding-top: 0.5rem;">
           <div style="display: flex; justify-content: space-between;"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>
           ${discount > 0 ? `<div style="display: flex; justify-content: space-between;"><span>Discount</span><span>-$${discount.toFixed(2)}</span></div>` : ''}
-          <div style="display: flex; justify-content: space-between;"><span>Tax</span><span>$${tax.toFixed(2)}</span></div>
+          <div style="display: flex; justify-content: space-between;"><span>Tax (non-EBT only)</span><span>$${tax.toFixed(2)}</span></div>
           <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 1.1rem; margin-top: 0.5rem;">
             <span>TOTAL</span><span>$${total.toFixed(2)}</span>
           </div>
@@ -2630,10 +2657,10 @@
         <div style="border-top: 1px dashed #444; margin-top: 0.5rem; padding-top: 0.5rem;">
           <div style="font-weight: 600; margin-bottom: 0.25rem;">SPLIT PAYMENT:</div>
           <div style="display: flex; justify-content: space-between; color: #22c55e;">
-            <span>EBT</span><span>$${ebtAmount.toFixed(2)}</span>
+            <span>EBT (Food${ebtDiscount > 0 ? ' after disc.' : ''})</span><span>$${ebtAmount.toFixed(2)}</span>
           </div>
           <div style="display: flex; justify-content: space-between; color: #f97316;">
-            <span>${secondPaymentType}</span><span>$${nonEbtAmount.toFixed(2)}</span>
+            <span>${secondPaymentType} (incl. tax)</span><span>$${nonEbtAmount.toFixed(2)}</span>
           </div>
         </div>
         <div style="text-align: center; margin-top: 1rem; font-size: 0.85rem; color: #888;">Thank you for shopping!</div>
