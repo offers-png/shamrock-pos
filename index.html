@@ -6,6 +6,32 @@
   <title>Shamrock Market POS</title>
   <link rel="stylesheet" href="styles.css">
   <style>
+    :root {
+      --pos-bg: #ffffff;
+      --pos-panel: #f8f9fa;
+      --pos-card: #ffffff;
+      --pos-border: #e2e8f0;
+      --pos-text: #1a202c;
+      --pos-text-muted: #64748b;
+      --pos-accent: #00a896;
+      --pos-accent-light: rgba(0, 168, 150, 0.1);
+      --pos-hover: #f1f5f9;
+      --pos-cart-bg: #f8fafc;
+    }
+
+    body.dark {
+      --pos-bg: #1a1a2e;
+      --pos-panel: #16213e;
+      --pos-card: #1e2746;
+      --pos-border: #2a3550;
+      --pos-text: #ffffff;
+      --pos-text-muted: #a0a5b8;
+      --pos-accent: #00d9a5;
+      --pos-accent-light: rgba(0, 217, 165, 0.1);
+      --pos-hover: #253256;
+      --pos-cart-bg: #1e2746;
+    }
+
     * {
       box-sizing: border-box;
     }
@@ -13,7 +39,7 @@
     body {
       margin: 0;
       padding: 0;
-      background: #1a1a2e;
+      background: var(--pos-bg);
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       overflow: hidden;
     }
@@ -26,10 +52,10 @@
 
     .left-panel {
       width: 420px;
-      background: #16213e;
+      background: var(--pos-panel);
       display: flex;
       flex-direction: column;
-      border-right: 2px solid #0f3460;
+      border-right: 2px solid var(--pos-border);
     }
 
     .store-header {
@@ -75,10 +101,10 @@
       display: grid;
       grid-template-columns: 2fr 1fr 1fr;
       padding: 0.75rem 1rem;
-      background: #1a1a2e;
+      background: var(--pos-bg);
       font-size: 0.75rem;
       font-weight: 600;
-      color: #8b8fa3;
+      color: var(--pos-text-muted);
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
@@ -86,21 +112,21 @@
     .cart-items {
       flex: 1;
       overflow-y: auto;
-      background: #1e2746;
+      background: var(--pos-cart-bg);
     }
 
     .cart-row {
       display: grid;
       grid-template-columns: 2fr 1fr 1fr;
       padding: 0.75rem 1rem;
-      border-bottom: 1px solid #2a3550;
+      border-bottom: 1px solid var(--pos-border);
       align-items: center;
-      color: white;
+      color: var(--pos-text);
       cursor: pointer;
     }
 
     .cart-row:hover {
-      background: #253256;
+      background: var(--pos-hover);
     }
 
     .cart-item-name {
@@ -116,7 +142,7 @@
     .cart-item-price {
       text-align: right;
       font-weight: 600;
-      color: #00d9a5;
+      color: var(--pos-accent);
     }
 
     .empty-cart {
@@ -125,7 +151,7 @@
       align-items: center;
       justify-content: center;
       height: 100%;
-      color: #5a6280;
+      color: var(--pos-text-muted);
       font-size: 0.875rem;
     }
 
@@ -137,9 +163,9 @@
     }
 
     .totals-section {
-      background: #1a1a2e;
+      background: var(--pos-bg);
       padding: 1rem;
-      border-top: 2px solid #0f3460;
+      border-top: 2px solid var(--pos-border);
     }
 
     .total-row {
@@ -147,20 +173,20 @@
       justify-content: space-between;
       padding: 0.375rem 0;
       font-size: 0.875rem;
-      color: #a0a5b8;
+      color: var(--pos-text-muted);
     }
 
     .total-row.grand {
       font-size: 1.5rem;
       font-weight: 700;
-      color: white;
+      color: var(--pos-text);
       padding: 0.75rem 0;
-      border-top: 1px solid #2a3550;
+      border-top: 1px solid var(--pos-border);
       margin-top: 0.5rem;
     }
 
     .total-row.grand span:last-child {
-      color: #00d9a5;
+      color: var(--pos-accent);
     }
 
     .tax-toggle-btn {
@@ -189,7 +215,7 @@
       grid-template-columns: 1fr 1fr 1fr;
       gap: 0.5rem;
       padding: 0.75rem 1rem;
-      background: #16213e;
+      background: var(--pos-panel);
     }
 
     .action-btn {
@@ -220,12 +246,12 @@
     }
 
     .btn-discount {
-      background: #2a3550;
-      color: white;
+      background: var(--pos-border);
+      color: var(--pos-text);
     }
 
     .btn-discount:hover {
-      background: #354270;
+      background: var(--pos-hover);
     }
 
     .btn-void {
@@ -238,21 +264,22 @@
     }
 
     .keypad-section {
-      background: #16213e;
+      background: var(--pos-panel);
       padding: 0.75rem;
-      border-top: 2px solid #0f3460;
+      border-top: 2px solid var(--pos-border);
     }
 
     .keypad-display {
-      background: #1a1a2e;
+      background: var(--pos-bg);
       padding: 0.75rem 1rem;
       text-align: right;
       font-size: 1.75rem;
       font-weight: 700;
-      color: #00d9a5;
+      color: var(--pos-accent);
       border-radius: 8px;
       margin-bottom: 0.75rem;
       font-family: 'DM Sans', monospace;
+      border: 1px solid var(--pos-border);
     }
 
     .keypad-grid {
@@ -269,12 +296,13 @@
       font-weight: 600;
       cursor: pointer;
       transition: all 0.1s;
-      background: #2a3550;
-      color: white;
+      background: var(--pos-card);
+      color: var(--pos-text);
+      border: 1px solid var(--pos-border);
     }
 
     .key-btn:hover {
-      background: #354270;
+      background: var(--pos-hover);
       transform: scale(1.02);
     }
 
@@ -283,8 +311,9 @@
     }
 
     .key-btn.key-qty {
-      background: #0f3460;
-      color: #00d9a5;
+      background: var(--pos-accent-light);
+      color: var(--pos-accent);
+      border-color: var(--pos-accent);
     }
 
     .key-btn.key-clear {
@@ -304,12 +333,12 @@
     }
 
     .payment-section {
-      background: #1a1a2e;
+      background: var(--pos-bg);
       padding: 0.75rem;
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: 0.5rem;
-      border-top: 2px solid #0f3460;
+      border-top: 2px solid var(--pos-border);
     }
 
     .pay-btn {
@@ -353,7 +382,7 @@
       flex: 1;
       display: flex;
       flex-direction: column;
-      background: #1e2746;
+      background: var(--pos-cart-bg);
     }
 
     .top-bar {
@@ -361,23 +390,24 @@
       align-items: center;
       justify-content: space-between;
       padding: 1rem 1.5rem;
-      background: #16213e;
-      border-bottom: 2px solid #0f3460;
+      background: var(--pos-panel);
+      border-bottom: 2px solid var(--pos-border);
     }
 
     .search-box {
       display: flex;
       align-items: center;
       gap: 0.75rem;
-      background: #1a1a2e;
+      background: var(--pos-bg);
       padding: 0.75rem 1rem;
       border-radius: 12px;
       flex: 1;
       max-width: 400px;
+      border: 1px solid var(--pos-border);
     }
 
     .search-box svg {
-      color: #5a6280;
+      color: var(--pos-text-muted);
       width: 20px;
       height: 20px;
     }
@@ -385,14 +415,14 @@
     .search-box input {
       border: none;
       background: transparent;
-      color: white;
+      color: var(--pos-text);
       font-size: 0.9375rem;
       flex: 1;
       outline: none;
     }
 
     .search-box input::placeholder {
-      color: #5a6280;
+      color: var(--pos-text-muted);
     }
 
     .menu-container {
@@ -403,29 +433,30 @@
       width: 44px;
       height: 44px;
       border: none;
-      background: #2a3550;
+      background: var(--pos-card);
       border-radius: 12px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: white;
+      color: var(--pos-text);
       transition: all 0.15s;
+      border: 1px solid var(--pos-border);
     }
 
     .menu-btn:hover {
-      background: #354270;
+      background: var(--pos-hover);
     }
 
     .menu-dropdown {
       position: absolute;
       top: calc(100% + 8px);
       right: 0;
-      background: #16213e;
-      border: 1px solid #2a3550;
+      background: var(--pos-panel);
+      border: 1px solid var(--pos-border);
       border-radius: 12px;
       min-width: 200px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
       z-index: 1000;
       display: none;
       overflow: hidden;
@@ -446,7 +477,7 @@
       align-items: center;
       gap: 0.75rem;
       padding: 0.875rem 1rem;
-      color: white;
+      color: var(--pos-text);
       font-size: 0.875rem;
       cursor: pointer;
       transition: background 0.15s;
@@ -457,18 +488,18 @@
     }
 
     .menu-item:hover {
-      background: #2a3550;
+      background: var(--pos-hover);
     }
 
     .menu-item svg {
       width: 18px;
       height: 18px;
-      color: #8b8fa3;
+      color: var(--pos-text-muted);
     }
 
     .menu-divider {
       height: 1px;
-      background: #2a3550;
+      background: var(--pos-border);
       margin: 0.25rem 0;
     }
 
@@ -562,7 +593,7 @@
     }
 
     .products-header h2 {
-      color: white;
+      color: var(--pos-text);
       font-size: 1.25rem;
       font-weight: 600;
       display: flex;
@@ -575,9 +606,9 @@
       align-items: center;
       gap: 0.5rem;
       padding: 0.625rem 1rem;
-      background: #2a3550;
-      color: white;
-      border: none;
+      background: var(--pos-card);
+      color: var(--pos-text);
+      border: 1px solid var(--pos-border);
       border-radius: 8px;
       cursor: pointer;
       font-size: 0.875rem;
@@ -586,7 +617,7 @@
     }
 
     .back-btn:hover {
-      background: #354270;
+      background: var(--pos-hover);
     }
 
     .products-grid {
@@ -598,8 +629,8 @@
     }
 
     .product-btn {
-      background: #2a3550;
-      border: 2px solid #354270;
+      background: var(--pos-card);
+      border: 2px solid var(--pos-border);
       border-radius: 12px;
       padding: 1rem;
       cursor: pointer;
@@ -611,8 +642,8 @@
     }
 
     .product-btn:hover {
-      background: #354270;
-      border-color: #00a896;
+      background: var(--pos-hover);
+      border-color: var(--pos-accent);
       transform: translateY(-2px);
     }
 
@@ -623,19 +654,19 @@
     .product-name {
       font-size: 0.875rem;
       font-weight: 600;
-      color: white;
+      color: var(--pos-text);
       line-height: 1.3;
     }
 
     .product-price {
       font-size: 1.125rem;
       font-weight: 700;
-      color: #00d9a5;
+      color: var(--pos-accent);
     }
 
     .product-barcode {
       font-size: 0.7rem;
-      color: #5a6280;
+      color: var(--pos-text-muted);
       font-family: monospace;
     }
 
@@ -652,10 +683,11 @@
     }
 
     .panel-content {
-      background: #16213e;
+      background: var(--pos-panel);
       border-radius: 16px;
       overflow-y: auto;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      border: 1px solid var(--pos-border);
     }
 
     .panel-header {
@@ -663,16 +695,16 @@
       align-items: center;
       justify-content: space-between;
       padding: 1.25rem 1.5rem;
-      border-bottom: 1px solid #2a3550;
+      border-bottom: 1px solid var(--pos-border);
       position: sticky;
       top: 0;
-      background: #16213e;
+      background: var(--pos-panel);
       z-index: 10;
       border-radius: 16px 16px 0 0;
     }
 
     .panel-header h2 {
-      color: white;
+      color: var(--pos-text);
       font-size: 1.25rem;
       font-weight: 600;
       margin: 0;
@@ -682,18 +714,20 @@
       width: 36px;
       height: 36px;
       border: none;
-      background: #2a3550;
+      background: var(--pos-card);
       border-radius: 8px;
-      color: white;
+      color: var(--pos-text);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       transition: all 0.15s;
+      border: 1px solid var(--pos-border);
     }
 
     .panel-close:hover {
       background: #dc3545;
+      color: white;
     }
 
     .panel-body {
@@ -702,7 +736,7 @@
 
     .panel-footer {
       padding: 1rem 1.5rem;
-      border-top: 1px solid #2a3550;
+      border-top: 1px solid var(--pos-border);
       display: flex;
       gap: 0.75rem;
       justify-content: flex-end;
@@ -1678,6 +1712,10 @@
   </div>
 
   <script>
+    // Apply saved theme
+    const savedTheme = localStorage.getItem('shamrock-theme') || 'light';
+    document.body.className = savedTheme;
+
     let CATEGORIES = ["Tobacco", "Beer", "Drinks", "Snacks", "Food", "Household", "Lottery", "Hot Food", "Grocery", "Medicine/Pharmacy", "Frozen / Ice", "Dairy", "Cold Subs", "Pets", "Other / Misc"];
     const AGE_RESTRICTED_CATEGORIES = ["Tobacco", "Beer"];
     const EBT_ELIGIBLE_CATEGORIES = ["Drinks", "Snacks", "Food", "Grocery", "Frozen / Ice", "Dairy", "Cold Subs"];
