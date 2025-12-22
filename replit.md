@@ -56,6 +56,7 @@ Integrates `electron-updater` for automatic application updates via GitHub relea
 - **Theme Support**: Light/dark theme toggle with persistence.
 - **Global Barcode Scanner**: Barcode scanning works globally across the POS screen without needing input focus.
 - **Windows Installer**: Provided via `electron-builder` for easy installation.
+- **ID Verification (21+)**: Age-restricted products (Beer, Tobacco) trigger ID check modal with two options: scan driver's license barcode (PDF417) or manually enter DOB. System calculates age and blocks sale if under 21. All ID checks are logged to database for compliance.
 
 ## External Dependencies
 
