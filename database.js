@@ -72,11 +72,20 @@ async function initDatabase() {
       taxable INTEGER DEFAULT 1,
       age_restricted INTEGER DEFAULT 0,
       min_age INTEGER DEFAULT 0,
+      ebt_eligible INTEGER DEFAULT 0,
       active INTEGER DEFAULT 1,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  const productsTableInfo = db.exec("PRAGMA table_info(products)");
+  if (productsTableInfo.length > 0) {
+    const columns = productsTableInfo[0].values.map(row => row[1]);
+    if (!columns.includes('ebt_eligible')) {
+      try { db.run(`ALTER TABLE products ADD COLUMN ebt_eligible INTEGER DEFAULT 0`); } catch(e) {}
+    }
+  }
 
   db.run(`
     CREATE TABLE IF NOT EXISTS sales (

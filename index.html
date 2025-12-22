@@ -1177,6 +1177,16 @@
           </span>
           <span>$<span id="tax">0.00</span></span>
         </div>
+        <div id="ebtSplitSection" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 0.5rem; margin-top: 0.5rem;">
+          <div class="total-row" style="color: #22c55e;">
+            <span>EBT Eligible (Food)</span>
+            <span>$<span id="ebtTotal">0.00</span></span>
+          </div>
+          <div class="total-row" style="color: #f97316;">
+            <span>Non-EBT (Cash/Card)</span>
+            <span>$<span id="nonEbtTotal">0.00</span></span>
+          </div>
+        </div>
         <div class="total-row grand">
           <span>Total</span>
           <span>$<span id="total">0.00</span></span>
@@ -1634,9 +1644,44 @@
 
   <div id="toast" class="toast"></div>
 
+  <div class="input-modal" id="splitPaymentModal">
+    <div class="input-modal-content" style="min-width: 380px;">
+      <div class="input-modal-header" style="background: linear-gradient(135deg, #22c55e, #16a34a); color: white; padding: 1rem; margin: -1rem -1rem 1rem -1rem; border-radius: 12px 12px 0 0;">
+        Split Payment Required
+      </div>
+      <div style="padding: 0.5rem 0; color: var(--text-primary);">
+        <p style="margin-bottom: 1rem; color: var(--text-secondary);">This order contains both EBT-eligible and non-eligible items.</p>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1rem;">
+          <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: rgba(34, 197, 94, 0.15); border-radius: 8px; border-left: 4px solid #22c55e;">
+            <span style="font-weight: 600; color: #22c55e;">EBT Eligible (Food)</span>
+            <span style="font-weight: 700; color: #22c55e;">$<span id="splitEbtAmount">0.00</span></span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: rgba(249, 115, 22, 0.15); border-radius: 8px; border-left: 4px solid #f97316;">
+            <span style="font-weight: 600; color: #f97316;">Non-EBT (Alcohol, etc.)</span>
+            <span style="font-weight: 700; color: #f97316;">$<span id="splitNonEbtAmount">0.00</span></span>
+          </div>
+        </div>
+        <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Pay EBT portion first, then select payment for remaining balance:</p>
+      </div>
+      <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+        <button class="input-modal-btn confirm" id="splitPayCash" style="flex: 1; background: #3b82f6;">
+          Remainder: Cash
+        </button>
+        <button class="input-modal-btn confirm" id="splitPayCard" style="flex: 1; background: #8b5cf6;">
+          Remainder: Card
+        </button>
+      </div>
+      <div class="input-modal-buttons">
+        <button class="input-modal-btn cancel" id="splitPayCancel" style="width: 100%;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let CATEGORIES = ["Tobacco", "Beer", "Drinks", "Snacks", "Food", "Household", "Lottery", "Hot Food", "Grocery", "Medicine/Pharmacy", "Frozen / Ice", "Dairy", "Cold Subs", "Pets", "Other / Misc"];
     const AGE_RESTRICTED_CATEGORIES = ["Tobacco", "Beer"];
+    const EBT_ELIGIBLE_CATEGORIES = ["Drinks", "Snacks", "Food", "Grocery", "Frozen / Ice", "Dairy", "Cold Subs"];
+    const NON_EBT_CATEGORIES = ["Tobacco", "Beer", "Hot Food", "Lottery", "Medicine/Pharmacy", "Household", "Pets", "Other / Misc"];
     let PRODUCTS = [];
     let barcodeIndex = {};
     let cart = [];
@@ -2118,6 +2163,24 @@
       updateTotals();
     }
 
+    function isEbtEligible(item) {
+      return EBT_ELIGIBLE_CATEGORIES.includes(item.category);
+    }
+
+    function getEbtSplit() {
+      let ebtSubtotal = 0;
+      let nonEbtSubtotal = 0;
+      cart.forEach(item => {
+        const itemTotal = item.price * item.qty;
+        if (isEbtEligible(item)) {
+          ebtSubtotal += itemTotal;
+        } else {
+          nonEbtSubtotal += itemTotal;
+        }
+      });
+      return { ebtSubtotal, nonEbtSubtotal };
+    }
+
     function updateTotals() {
       let subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
       let discountAmount = subtotal * (discountPercentage / 100);
@@ -2131,6 +2194,19 @@
       taxSpan.textContent = tax.toFixed(2);
       totalSpan.textContent = total.toFixed(2);
       taxRateLabel.textContent = taxEnabled ? "8" : "0";
+
+      const { ebtSubtotal, nonEbtSubtotal } = getEbtSplit();
+      const ebtSplitSection = document.getElementById("ebtSplitSection");
+      const hasEbt = ebtSubtotal > 0;
+      const hasNonEbt = nonEbtSubtotal > 0;
+      
+      if (hasEbt && hasNonEbt) {
+        ebtSplitSection.style.display = "block";
+        document.getElementById("ebtTotal").textContent = ebtSubtotal.toFixed(2);
+        document.getElementById("nonEbtTotal").textContent = nonEbtSubtotal.toFixed(2);
+      } else {
+        ebtSplitSection.style.display = "none";
+      }
       
       syncCustomerDisplay(subtotal, tax, total);
     }
@@ -2398,7 +2474,173 @@
 
     document.getElementById("payCashBtn").addEventListener("click", () => completeSaleInstantly("Cash"));
     document.getElementById("payDebitBtn").addEventListener("click", () => completeSaleInstantly("Debit Card"));
-    document.getElementById("payEBTBtn").addEventListener("click", () => completeSaleInstantly("EBT"));
+    
+    document.getElementById("payEBTBtn").addEventListener("click", () => {
+      if (cart.length === 0) {
+        showToast("Cart is empty!", true);
+        return;
+      }
+      
+      const { ebtSubtotal, nonEbtSubtotal } = getEbtSplit();
+      
+      if (ebtSubtotal === 0) {
+        showToast("No EBT-eligible items in cart!", true);
+        return;
+      }
+      
+      if (nonEbtSubtotal > 0) {
+        document.getElementById("splitEbtAmount").textContent = ebtSubtotal.toFixed(2);
+        document.getElementById("splitNonEbtAmount").textContent = nonEbtSubtotal.toFixed(2);
+        document.getElementById("splitPaymentModal").classList.add("show");
+      } else {
+        completeSaleInstantly("EBT");
+      }
+    });
+
+    document.getElementById("splitPayCancel").addEventListener("click", () => {
+      document.getElementById("splitPaymentModal").classList.remove("show");
+    });
+
+    document.getElementById("splitPayCash").addEventListener("click", () => {
+      document.getElementById("splitPaymentModal").classList.remove("show");
+      completeSplitSale("Cash");
+    });
+
+    document.getElementById("splitPayCard").addEventListener("click", () => {
+      document.getElementById("splitPaymentModal").classList.remove("show");
+      completeSplitSale("Debit Card");
+    });
+
+    function completeSplitSale(secondPaymentType) {
+      if (cart.length === 0) {
+        showToast("Cart is empty!", true);
+        return;
+      }
+
+      const { ebtSubtotal, nonEbtSubtotal } = getEbtSplit();
+      const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
+      const discountAmount = subtotal * (discountPercentage / 100);
+      const afterDiscount = subtotal - discountAmount;
+      const taxRate = taxEnabled ? BASE_TAX_RATE : 0;
+      const tax = afterDiscount * taxRate;
+      const total = afterDiscount + tax;
+
+      const cartCopy = cart.map(item => ({ ...item, ebt_eligible: isEbtEligible(item) }));
+      const paymentType = `EBT + ${secondPaymentType}`;
+
+      lastSaleData = {
+        store: { name: "Shamrock Market", phone: "(315) 400-3825" },
+        items: cartCopy,
+        subtotal,
+        discount: discountAmount,
+        taxRate: taxEnabled ? 8 : 0,
+        taxAmount: tax,
+        total,
+        paymentType,
+        ebtAmount: ebtSubtotal,
+        nonEbtAmount: nonEbtSubtotal,
+        secondPaymentType
+      };
+
+      (async () => {
+        try {
+          await fetch("/api/sales", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              items: cartCopy,
+              paymentType,
+              subtotal,
+              discount: discountAmount,
+              tax,
+              total,
+              ebtAmount: ebtSubtotal,
+              nonEbtAmount: nonEbtSubtotal,
+              clientTimestamp: new Date().toISOString(),
+            }),
+          });
+        } catch (err) {
+          console.error("Failed to log sale:", err);
+        }
+
+        if (secondPaymentType === "Cash" && window.electronAPI && window.electronAPI.completeSale) {
+          try {
+            await window.electronAPI.completeSale({ openDrawer: true });
+          } catch (e) {
+            console.log("Cash drawer not connected:", e);
+          }
+        }
+      })();
+
+      generateSplitReceipt(cartCopy, subtotal, discountAmount, tax, total, ebtSubtotal, nonEbtSubtotal, secondPaymentType);
+      showPanel(receiptPanel);
+      
+      clearCart();
+      keypadBuffer = "";
+      updateKeypadDisplay();
+      
+      showToast(`Split payment complete! EBT: $${ebtSubtotal.toFixed(2)}, ${secondPaymentType}: $${nonEbtSubtotal.toFixed(2)}`);
+    }
+
+    function generateSplitReceipt(items, subtotal, discount, tax, total, ebtAmount, nonEbtAmount, secondPaymentType) {
+      const now = new Date();
+      const dateStr = now.toLocaleDateString();
+      const timeStr = now.toLocaleTimeString();
+      
+      let html = `
+        <div style="text-align: center; font-weight: bold; font-size: 1.2rem;">SHAMROCK MARKET</div>
+        <div style="text-align: center; font-size: 0.85rem; color: #888;">(315) 400-3825</div>
+        <div style="text-align: center; font-size: 0.85rem; color: #888; margin-bottom: 1rem;">${dateStr} ${timeStr}</div>
+        <div style="border-top: 1px dashed #444; padding-top: 0.5rem;">
+      `;
+      
+      const ebtItems = items.filter(i => i.ebt_eligible);
+      const nonEbtItems = items.filter(i => !i.ebt_eligible);
+      
+      if (ebtItems.length > 0) {
+        html += `<div style="font-weight: 600; color: #22c55e; margin: 0.5rem 0;">-- EBT ELIGIBLE --</div>`;
+        ebtItems.forEach(item => {
+          html += `<div style="display: flex; justify-content: space-between;">
+            <span>${item.qty}x ${item.name}</span>
+            <span>$${(item.price * item.qty).toFixed(2)}</span>
+          </div>`;
+        });
+      }
+      
+      if (nonEbtItems.length > 0) {
+        html += `<div style="font-weight: 600; color: #f97316; margin: 0.5rem 0;">-- NON-EBT --</div>`;
+        nonEbtItems.forEach(item => {
+          html += `<div style="display: flex; justify-content: space-between;">
+            <span>${item.qty}x ${item.name}</span>
+            <span>$${(item.price * item.qty).toFixed(2)}</span>
+          </div>`;
+        });
+      }
+      
+      html += `
+        </div>
+        <div style="border-top: 1px dashed #444; margin-top: 0.5rem; padding-top: 0.5rem;">
+          <div style="display: flex; justify-content: space-between;"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>
+          ${discount > 0 ? `<div style="display: flex; justify-content: space-between;"><span>Discount</span><span>-$${discount.toFixed(2)}</span></div>` : ''}
+          <div style="display: flex; justify-content: space-between;"><span>Tax</span><span>$${tax.toFixed(2)}</span></div>
+          <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 1.1rem; margin-top: 0.5rem;">
+            <span>TOTAL</span><span>$${total.toFixed(2)}</span>
+          </div>
+        </div>
+        <div style="border-top: 1px dashed #444; margin-top: 0.5rem; padding-top: 0.5rem;">
+          <div style="font-weight: 600; margin-bottom: 0.25rem;">SPLIT PAYMENT:</div>
+          <div style="display: flex; justify-content: space-between; color: #22c55e;">
+            <span>EBT</span><span>$${ebtAmount.toFixed(2)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; color: #f97316;">
+            <span>${secondPaymentType}</span><span>$${nonEbtAmount.toFixed(2)}</span>
+          </div>
+        </div>
+        <div style="text-align: center; margin-top: 1rem; font-size: 0.85rem; color: #888;">Thank you for shopping!</div>
+      `;
+      
+      receiptContentDiv.innerHTML = html;
+    }
 
     document.getElementById("checkoutBtn").addEventListener("click", () => completeSaleInstantly("Cash"));
 
