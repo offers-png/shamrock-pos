@@ -57,6 +57,7 @@ Integrates `electron-updater` for automatic application updates via GitHub relea
 - **Global Barcode Scanner**: Barcode scanning works globally across the POS screen without needing input focus.
 - **Windows Installer**: Provided via `electron-builder` for easy installation.
 - **ID Verification (21+)**: Age-restricted products (Beer, Tobacco) trigger ID check modal with two options: scan driver's license barcode (PDF417) or manually enter DOB. System calculates age and blocks sale if under 21. All ID checks are logged to database for compliance.
+- **EBT/SNAP Split Payment**: Automatic category-based EBT eligibility detection. When cart contains both EBT-eligible (food) and non-eligible items (alcohol, tobacco, hot food), the system displays split totals and triggers a split payment modal. EBT pays for food portion, then customer pays remaining balance with cash or card. Tax is only applied to non-EBT items. Receipts show itemized breakdown with both payment portions clearly displayed. EBT-eligible categories: Drinks, Snacks, Food, Grocery, Frozen/Ice, Dairy, Cold Subs.
 
 ## External Dependencies
 
