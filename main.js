@@ -277,6 +277,7 @@ ipcMain.handle('print-receipt', async (event, payload) => {
   try {
     const { printReceipt } = require('./printer');
     const openDrawer = payload?.paymentType === 'Cash';
+    await new Promise(resolve => setTimeout(resolve, 300));
     await printReceipt(mainWindow, payload, openDrawer);
     return { ok: true };
   } catch (err) {
