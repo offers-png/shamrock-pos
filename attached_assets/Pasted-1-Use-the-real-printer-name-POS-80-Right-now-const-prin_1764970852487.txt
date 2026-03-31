@@ -1,0 +1,82 @@
+1️⃣ Use the real printer name: POS-80
+
+Right now:
+
+const printerName = process.env.SHAMROCK_PRINTER_NAME || "volcora recipit printer";
+
+
+Change it to:
+
+const printerName = process.env.SHAMROCK_PRINTER_NAME || "POS-80";
+
+
+This makes both the RAW printer path and the Windows-driver path aim at the same device you see in Windows (“POS-80”).
+
+2️⃣ Open the drawer when the receipt prints
+
+At the bottom of the file you have:
+
+async function printReceipt(mainWindow, payload) {
+  if (nativePrinterAvailable) {
+    try {
+      await printReceiptRaw(payload, true, false);
+      return;
+    } catch (err) {
+      console.warn('Raw ESC/POS print failed, falling back to Windows driver:', err.message);
+    }
+  }
+
+  await printReceiptWindows(mainWindow, payload);
+}
+
+
+Change only that one line to pass true for includeDrawer:
+
+      await printReceiptRaw(payload, true, true);
+
+
+So the function becomes:
+
+async function printReceipt(mainWindow, payload) {
+  if (nativePrinterAvailable) {
+    try {
+      await printReceiptRaw(payload, true, true); // cut paper + open drawer
+      return;
+    } catch (err) {
+      console.warn('Raw ESC/POS print failed, falling back to Windows driver:', err.message);
+    }
+  }
+
+  await printReceiptWindows(mainWindow, payload);
+}
+
+
+Note: the drawer will only pop when the native printer module is working on that machine. Right now on the POS it’s probably still using the Windows-print fallback, which prints fine but can’t send the raw “kick drawer” command. Once Reb/you get the printer module compiled on that POS, this will start opening the drawer automatically.
+
+3️⃣ Add a bit more blank paper before the cut (optional)
+
+In generateReceiptText, near the bottom you already have:
+
+  lines.push('');
+  lines.push('');
+  lines.push('');
+
+
+If you want more tail before the cutter, bump that to 5 or 6 empty lines, e.g.:
+
+  lines.push('');
+  lines.push('');
+  lines.push('');
+  lines.push('');
+  lines.push('');
+
+
+That’s it for length.
+
+Quick summary
+
+Change printer name to "POS-80" so Electron points at the same printer Windows is using.
+
+Turn on drawer kick in printReceiptRaw by using true, true.
+
+Add extra blank lines at the end of generateReceiptText if you want more space before the cut.
