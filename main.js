@@ -276,7 +276,7 @@ app.on('window-all-closed', () => {
 ipcMain.handle('print-receipt', async (event, payload) => {
   try {
     const { printReceipt } = require('./printer');
-    const openDrawer = payload?.paymentType === 'Cash';
+    const openDrawer = payload?.paymentType === 'Cash' || String(payload?.paymentType || '').includes('Cash');
     await new Promise(resolve => setTimeout(resolve, 300));
     await printReceipt(mainWindow, payload, openDrawer);
     return { ok: true };

@@ -289,7 +289,7 @@ function openCashDrawerRaw() {
 
     console.log('Opening cash drawer via raw ESC/POS command');
 
-    const drawerCommand = Buffer.concat([CMD.OPEN_DRAWER]);
+    const drawerCommand = Buffer.concat([CMD.INIT, CMD.OPEN_DRAWER]);
 
     nativePrinter.printDirect({
       data: drawerCommand,
@@ -310,28 +310,65 @@ function openCashDrawerRaw() {
 function generateReceiptHTML(payload) {
   const {
     store, items, subtotal, discount,
-    taxRate, taxAmount, total, paymentType, saleId
+    taxRate, taxAmount, total, paymentType, saleId,
+    ebtAmount, nonEbtAmount, ebtDiscount, nonEbtTax, secondPaymentType
   } = payload || {};
 
   const fmt = (n) => Number(n || 0).toFixed(2);
   const timestamp = new Date().toLocaleString();
+  const isSplitEbt = !!secondPaymentType;
 
   let itemsHTML = '';
   if (Array.isArray(items)) {
-    items.forEach((item) => {
-      const name = String(item.name || '').slice(0, 24);
-      const qty = item.qty || 1;
-      const price = fmt(item.price);
-      const lineTotal = fmt(item.total || qty * (item.price || 0));
-      itemsHTML += `
-        <div class="item">
-          <span class="item-name">${name}</span>
-          <span class="item-details">${qty} x $${price}</span>
-          <span class="item-total">$${lineTotal}</span>
-        </div>
-      `;
-    });
+    if (isSplitEbt) {
+      const ebtItems = items.filter(i => i.ebt_eligible);
+      const nonEbtItems = items.filter(i => !i.ebt_eligible);
+      if (ebtItems.length > 0) {
+        itemsHTML += `<div class="section-label ebt-label">-- EBT (Tax Exempt) --</div>`;
+        ebtItems.forEach((item) => {
+          const name = String(item.name || '').slice(0, 24);
+          const qty = item.qty || 1;
+          itemsHTML += `
+            <div class="item">
+              <span class="item-name">${name}</span>
+              <span class="item-details">${qty} x $${fmt(item.price)}</span>
+              <span class="item-total">$${fmt(item.total || qty * (item.price || 0))}</span>
+            </div>`;
+        });
+      }
+      if (nonEbtItems.length > 0) {
+        itemsHTML += `<div class="section-label nonebt-label">-- Non-EBT (Taxable) --</div>`;
+        nonEbtItems.forEach((item) => {
+          const name = String(item.name || '').slice(0, 24);
+          const qty = item.qty || 1;
+          itemsHTML += `
+            <div class="item">
+              <span class="item-name">${name}</span>
+              <span class="item-details">${qty} x $${fmt(item.price)}</span>
+              <span class="item-total">$${fmt(item.total || qty * (item.price || 0))}</span>
+            </div>`;
+        });
+      }
+    } else {
+      items.forEach((item) => {
+        const name = String(item.name || '').slice(0, 24);
+        const qty = item.qty || 1;
+        itemsHTML += `
+          <div class="item">
+            <span class="item-name">${name}</span>
+            <span class="item-details">${qty} x $${fmt(item.price)}</span>
+            <span class="item-total">$${fmt(item.total || qty * (item.price || 0))}</span>
+          </div>`;
+      });
+    }
   }
+
+  const splitTotalsHTML = isSplitEbt ? `
+    <div class="divider"></div>
+    <div style="font-weight:bold;margin-bottom:3px;">SPLIT PAYMENT:</div>
+    <div class="total-line"><span>${ebtDiscount > 0 ? 'EBT (after disc.)' : 'EBT (Food)'}:</span><span>$${fmt(ebtAmount)}</span></div>
+    <div class="total-line"><span>${secondPaymentType} (incl. tax):</span><span>$${fmt(nonEbtAmount)}</span></div>
+  ` : '';
 
   return `
 <!DOCTYPE html>
@@ -357,6 +394,9 @@ function generateReceiptHTML(payload) {
     .store-phone { font-size: 10px; }
     .divider { border-top: 1px dashed black; margin: 6px 0; }
     .payment-type { text-align: center; font-weight: bold; margin-bottom: 4px; }
+    .section-label { text-align: center; font-size: 10px; font-weight: bold; margin: 4px 0; }
+    .ebt-label { color: #006400; }
+    .nonebt-label { color: #8B4500; }
     .item { display: flex; flex-wrap: wrap; margin-bottom: 3px; }
     .item-name { width: 100%; font-weight: 500; }
     .item-details { flex: 1; font-size: 10px; }
@@ -381,9 +421,13 @@ function generateReceiptHTML(payload) {
   <div class="totals">
     <div class="total-line"><span>Subtotal:</span><span>$${fmt(subtotal)}</span></div>
     ${discount ? `<div class="total-line"><span>Discount:</span><span>-$${fmt(discount)}</span></div>` : ''}
-    ${taxAmount ? `<div class="total-line"><span>Tax (${taxRate || 0}%):</span><span>$${fmt(taxAmount)}</span></div>` : ''}
+    ${isSplitEbt
+      ? (nonEbtTax ? `<div class="total-line"><span>Tax (non-EBT only):</span><span>$${fmt(nonEbtTax)}</span></div>` : '')
+      : (taxAmount ? `<div class="total-line"><span>Tax (${taxRate || 0}%):</span><span>$${fmt(taxAmount)}</span></div>` : '')
+    }
     <div class="total-line grand-total"><span>TOTAL:</span><span>$${fmt(total)}</span></div>
   </div>
+  ${splitTotalsHTML}
   <div class="footer">
     Thank you for shopping!
     ${saleId ? `<div class="sale-id">Receipt: ${saleId}</div>` : ''}

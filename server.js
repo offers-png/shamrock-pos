@@ -160,22 +160,45 @@ async function syncSaleToSheets(sale) {
 async function deleteProductFromSheets(barcode) {
   if (!sheetsApi) return;
   try {
+    // First get the spreadsheet ID (needed for batchUpdate)
     const existingData = await sheetsApi.spreadsheets.values.get({
       spreadsheetId: PRODUCTS_SPREADSHEET_ID,
       range: `${PRODUCTS_SHEET}!A:A`
     });
     
     const rows = existingData.data.values || [];
+    let rowIndex = -1;
     for (let i = 0; i < rows.length; i++) {
       if (rows[i][0] === barcode) {
-        await sheetsApi.spreadsheets.values.clear({
-          spreadsheetId: PRODUCTS_SPREADSHEET_ID,
-          range: `${PRODUCTS_SHEET}!A${i + 1}:D${i + 1}`
-        });
-        console.log(`Deleted product from Sheets: ${barcode}`);
+        rowIndex = i; // 0-based index
         break;
       }
     }
+
+    if (rowIndex === -1) return;
+
+    // Get the sheet ID for batchUpdate
+    const spreadsheet = await sheetsApi.spreadsheets.get({ spreadsheetId: PRODUCTS_SPREADSHEET_ID });
+    const sheet = spreadsheet.data.sheets.find(s => s.properties.title === PRODUCTS_SHEET);
+    const sheetId = sheet ? sheet.properties.sheetId : 0;
+
+    // Delete the actual row so no blank rows are left behind
+    await sheetsApi.spreadsheets.batchUpdate({
+      spreadsheetId: PRODUCTS_SPREADSHEET_ID,
+      resource: {
+        requests: [{
+          deleteDimension: {
+            range: {
+              sheetId,
+              dimension: 'ROWS',
+              startIndex: rowIndex,
+              endIndex: rowIndex + 1
+            }
+          }
+        }]
+      }
+    });
+    console.log(`Deleted product row from Sheets: ${barcode}`);
   } catch (err) {
     console.error("Error deleting product from Sheets:", err.message);
   }
@@ -620,6 +643,14 @@ app.post("/api/auth/login", async (req, res) => {
 // Temporary access tokens for protected features (expires after 5 minutes)
 const managerAccessTokens = new Map();
 
+// Prune expired tokens every 10 minutes to prevent memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, data] of managerAccessTokens.entries()) {
+    if (data.expires < now) managerAccessTokens.delete(token);
+  }
+}, 10 * 60 * 1000);
+
 // Verify manager/owner PIN for protected features
 app.post("/api/auth/verify-manager-pin", async (req, res) => {
   const { pin } = req.body;
@@ -824,9 +855,9 @@ app.get("/api/reports/x-report", async (req, res) => {
     for (const sale of sales) {
       totalSales += sale.total;
       itemCount += sale.item_count;
-      if (sale.payment_type === 'Cash') cashSales += sale.total;
-      else if (sale.payment_type === 'Debit Card') cardSales += sale.total;
-      else if (sale.payment_type === 'EBT') ebtSales += sale.total;
+      if (sale.payment_type === 'Cash' || sale.payment_type === 'EBT + Cash') cashSales += sale.total;
+      else if (sale.payment_type === 'Debit Card' || sale.payment_type === 'EBT + Debit Card') cardSales += sale.total;
+      if (sale.payment_type === 'EBT' || String(sale.payment_type).startsWith('EBT +')) ebtSales += sale.total;
     }
 
     res.json({

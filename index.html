@@ -2803,12 +2803,15 @@
 
       const cartCopy = cart.map(item => ({ ...item }));
 
+      // For EBT-only, tax is always 0 regardless of taxEnabled setting
+      const actualTaxRate = (paymentType === 'EBT' || tax === 0) ? 0 : (taxEnabled ? 8 : 0);
+
       ReceiptService.setLastReceipt({
         store: { name: "Shamrock Market", phone: "(315) 400-3825" },
         items: cartCopy,
         subtotal,
         discount: discountAmount,
-        taxRate: taxEnabled ? 8 : 0,
+        taxRate: actualTaxRate,
         taxAmount: tax,
         total,
         paymentType
@@ -2972,6 +2975,17 @@
               if (result && result.warning) {
                 showToast("Drawer: " + result.warning, true);
               }
+              // Log drawer open (was missing for split sales)
+              fetch("/api/drawer-log", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  reason: "Sale",
+                  sale_amount: total,
+                  user_id: currentUser?.id || 0,
+                  user_name: currentUser?.displayName || currentUser?.username || "Unknown"
+                })
+              }).catch(() => {});
             } catch (e) {
               showToast("Drawer error: " + e.message, true);
             }
@@ -4135,14 +4149,36 @@
         renderCart();
       });
       
-      // Focus watchdog - prevent scanner freeze after idle
-      setInterval(() => {
+      // === FOCUS RECOVERY SYSTEM ===
+      // Restores barcode input instantly after sleep/wake, window switch, or idle
+
+      function restoreFocusIfIdle() {
         const activeModal = document.querySelector('.modal.show, .input-modal.show, .inline-panel.show');
-        if (!activeModal && document.activeElement !== barcodeInput) {
+        const activeEl = document.activeElement;
+        // Don't steal focus from modals or from inputs the cashier is actively using
+        const userIsTypingElsewhere = activeEl &&
+          (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA') &&
+          activeEl !== barcodeInput;
+        if (!activeModal && !userIsTypingElsewhere) {
           barcodeInput.focus();
-          console.log("Focus watchdog: Reset focus to barcode input");
         }
-      }, 60000); // Every minute
+      }
+
+      // 1. Fire immediately when window regains focus (alt-tab back, screen wake)
+      window.addEventListener('focus', () => {
+        restoreFocusIfIdle();
+      });
+
+      // 2. Fire when page becomes visible again (display sleep/wake, browser restore)
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          // Small delay so OS finishes wake sequence before we claim focus
+          setTimeout(restoreFocusIfIdle, 150);
+        }
+      });
+
+      // 3. Safety-net watchdog every 5s (was 60s — missed first scan after wake)
+      setInterval(restoreFocusIfIdle, 5000);
     }
 
     // Drawer Log Viewer (Owner/Manager only - PIN protected)

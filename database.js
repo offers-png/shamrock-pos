@@ -452,10 +452,13 @@ const salesRepo = {
   },
 
   async getByDateRange(startDate, endDate) {
+    // Use local day boundaries so date ranges align with local time, not UTC
+    const { startSql } = formatLocalDayBoundsForSql(startDate);
+    const { endSql } = formatLocalDayBoundsForSql(endDate);
     const db = await getDb();
     const result = db.exec(`
       SELECT * FROM sales 
-      WHERE created_at >= '${startDate}' AND created_at < '${endDate}' 
+      WHERE created_at >= '${startSql}' AND created_at <= '${endSql}' 
       ORDER BY created_at DESC
     `);
     return result.length ? result[0].values.map(row => rowToSale(result[0].columns, row)) : [];
@@ -476,7 +479,7 @@ const salesRepo = {
 
   async getShiftSales(shiftId) {
     const db = await getDb();
-    const result = db.exec(`SELECT * FROM sales WHERE shift_id = ${shiftId} AND voided = 0`);
+    const result = db.exec('SELECT * FROM sales WHERE shift_id = ? AND voided = 0', [Number(shiftId)]);
     return result.length ? result[0].values.map(row => rowToSale(result[0].columns, row)) : [];
   },
 
@@ -495,9 +498,9 @@ const salesRepo = {
       SELECT 
         COUNT(*) as transaction_count,
         COALESCE(SUM(total), 0) as total_sales,
-        COALESCE(SUM(CASE WHEN payment_type = 'Cash' THEN total ELSE 0 END), 0) as cash_total,
-        COALESCE(SUM(CASE WHEN payment_type = 'Debit Card' THEN total ELSE 0 END), 0) as card_total,
-        COALESCE(SUM(CASE WHEN payment_type = 'EBT' THEN total ELSE 0 END), 0) as ebt_total,
+        COALESCE(SUM(CASE WHEN payment_type = 'Cash' OR payment_type = 'EBT + Cash' THEN total ELSE 0 END), 0) as cash_total,
+        COALESCE(SUM(CASE WHEN payment_type = 'Debit Card' OR payment_type = 'EBT + Debit Card' THEN total ELSE 0 END), 0) as card_total,
+        COALESCE(SUM(CASE WHEN payment_type = 'EBT' OR payment_type LIKE 'EBT +%' THEN total ELSE 0 END), 0) as ebt_total,
         COALESCE(SUM(CASE WHEN payment_type = 'Store Credit' THEN total ELSE 0 END), 0) as store_credit_total,
         COALESCE(SUM(item_count), 0) as total_items,
         COALESCE(SUM(discount), 0) as total_discounts,
