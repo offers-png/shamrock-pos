@@ -1,0 +1,8 @@
+version: 1.0.35
+files:
+  - url: Shamrock-POS-Setup-1.0.35.exe
+    sha512: jUf3ArYIQGg18eS9oyJY/AtU/OhMyeoIqrOODZXAEQldzfUwXv5bRAmDeqJ/VTvdSlBMlOVJgxxu4Cm7YdxOOA==
+    size: 310161059
+path: Shamrock-POS-Setup-1.0.35.exe
+sha512: jUf3ArYIQGg18eS9oyJY/AtU/OhMyeoIqrOODZXAEQldzfUwXv5bRAmDeqJ/VTvdSlBMlOVJgxxu4Cm7YdxOOA==
+releaseDate: '2026-04-24T00:00:00.000Z'

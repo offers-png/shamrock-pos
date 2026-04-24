@@ -35,57 +35,95 @@ function setupAutoUpdater() {
   }
 
   if (!isAutoUpdateConfigured()) {
-    console.log('Auto-update not configured. Set publish config in package.json to enable.');
+    console.log('Auto-update not configured.');
     return;
   }
 
+  autoUpdater.allowPrerelease = false;
+  autoUpdater.allowDowngrade = false;
+
+  function sendStatus(msg) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('updater-status', msg);
+    }
+    console.log('[updater]', msg);
+  }
+
   autoUpdater.on('checking-for-update', () => {
-    console.log('Checking for updates...');
+    sendStatus('Checking for updates...');
   });
 
   autoUpdater.on('update-available', (info) => {
-    console.log('Update available:', info.version);
+    sendStatus(`Update available: v${info.version}`);
     dialog.showMessageBox(mainWindow, {
       type: 'info',
       title: 'Update Available',
-      message: `A new version (${info.version}) is available. Would you like to download it now?`,
-      buttons: ['Download', 'Later']
+      message: `Shamrock POS v${info.version} is available.\nWould you like to download and install it now?`,
+      buttons: ['Download Now', 'Later'],
+      defaultId: 0
     }).then((result) => {
       if (result.response === 0) {
         autoUpdater.downloadUpdate();
+        sendStatus('Downloading update...');
       }
     });
   });
 
-  autoUpdater.on('update-not-available', () => {
-    console.log('No updates available');
+  autoUpdater.on('update-not-available', (info) => {
+    sendStatus(`App is up to date (v${info.version})`);
   });
 
   autoUpdater.on('download-progress', (progressObj) => {
-    console.log(`Download progress: ${progressObj.percent.toFixed(1)}%`);
+    sendStatus(`Downloading: ${progressObj.percent.toFixed(1)}%`);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setProgressBar(progressObj.percent / 100);
+    }
   });
 
   autoUpdater.on('update-downloaded', (info) => {
-    console.log('Update downloaded:', info.version);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setProgressBar(-1);
+    }
+    sendStatus(`Update v${info.version} ready to install`);
     dialog.showMessageBox(mainWindow, {
       type: 'info',
-      title: 'Update Ready',
-      message: 'Update downloaded. The application will restart to install the update.',
-      buttons: ['Restart Now', 'Later']
+      title: 'Update Ready to Install',
+      message: `Shamrock POS v${info.version} downloaded.\nThe app will restart to install.`,
+      buttons: ['Restart & Install Now', 'Install on Next Restart'],
+      defaultId: 0
     }).then((result) => {
       if (result.response === 0) {
-        autoUpdater.quitAndInstall();
+        autoUpdater.quitAndInstall(false, true);
       }
     });
   });
 
   autoUpdater.on('error', (err) => {
-    console.error('Auto-updater error:', err.message);
+    console.error('[updater] Error:', err.message);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setProgressBar(-1);
+    }
+    if (!err.message.includes('net::') && !err.message.includes('ENOTFOUND')) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        title: 'Update Error',
+        message: `Update check failed: ${err.message}`,
+        buttons: ['OK']
+      });
+    }
   });
 
-  autoUpdater.checkForUpdates().catch((err) => {
-    console.error('Failed to check for updates:', err.message);
+  // Check on startup
+  autoUpdater.checkForUpdates().catch(err => {
+    console.error('[updater] Initial check failed:', err.message);
   });
+
+  // Then every 4 hours silently
+  setInterval(() => {
+    autoUpdater.checkForUpdates().catch(err => {
+      console.error('[updater] Periodic check failed:', err.message);
+    });
+  }, 4 * 60 * 60 * 1000);
 }
 
 app.disableHardwareAcceleration();

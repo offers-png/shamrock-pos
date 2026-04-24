@@ -1,6 +1,6 @@
 {
   "name": "shamrock-pos",
-  "version": "1.0.34",
+  "version": "1.0.35",
   "description": "Shamrock Market POS Desktop App",
   "author": "Shamrock Market",
   "main": "main.js",
