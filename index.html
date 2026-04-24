@@ -2014,21 +2014,33 @@
       setTimeout(() => toast.classList.remove("show"), 2500);
     }
 
-    async function loadProducts() {
+    async function loadProducts(retryCount = 0) {
       try {
         const res = await fetch("/api/products");
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
         const data = await res.json();
         if (data.success && Array.isArray(data.products)) {
           PRODUCTS = data.products.map(p => ({
             name: p.name || "",
             price: Number(p.price) || 0,
             barcode: p.barcode || "",
-            category: p.category || "Misc"
+            category: p.category || "Misc",
+            ebt_eligible: p.ebt_eligible || false
           }));
           rebuildBarcodeIndex();
         }
       } catch (e) {
-        console.error("Failed to load products:", e);
+        console.error("Failed to load products (attempt " + (retryCount + 1) + "):", e);
+        if (retryCount < 4) {
+          // Retry with exponential backoff — server may still be waking up
+          const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
+          console.log("Retrying loadProducts in " + delay + "ms...");
+          setTimeout(() => loadProducts(retryCount + 1), delay);
+        } else {
+          // After 4 retries, force a full page reload — clears all bad state
+          console.error("loadProducts failed after 4 retries, reloading page...");
+          setTimeout(() => window.location.reload(), 2000);
+        }
       }
     }
 

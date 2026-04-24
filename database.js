@@ -30,7 +30,25 @@ const dbPath = process.env.SHAMROCK_DB_PATH || path.join(__dirname, 'shamrock.db
 let db = null;
 let SQL = null;
 
+function isDbAlive(handle) {
+  // sql.js stores DB in WASM memory. After system sleep Windows can page out
+  // the Node process — db is non-null but WASM heap is gone, so every query throws.
+  // Run a trivial probe to confirm the handle is actually usable.
+  try {
+    handle.exec('SELECT 1');
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 async function getDb() {
+  if (db && !isDbAlive(db)) {
+    // Dead handle after sleep — force full re-init from disk
+    console.warn('[db] Database handle dead after sleep, reinitializing...');
+    db = null;
+  }
+
   if (!db) {
     if (!SQL) {
       const sqljsDir = process.env.SHAMROCK_SQLJS_DIR || path.join(__dirname, 'node_modules', 'sql.js', 'dist');
@@ -38,13 +56,15 @@ async function getDb() {
         locateFile: file => path.join(sqljsDir, file)
       });
     }
-    
+
     if (fs.existsSync(dbPath)) {
       const fileBuffer = fs.readFileSync(dbPath);
       db = new SQL.Database(fileBuffer);
     } else {
       db = new SQL.Database();
     }
+
+    console.log('[db] Database reinitialized from disk');
   }
   return db;
 }

@@ -288,6 +288,33 @@ app.whenReady().then(async () => {
   powerMonitor.on('unlock-screen', () => sendWakeSignal('unlock-screen'));
   powerMonitor.on('user-did-become-active', () => sendWakeSignal('user-did-become-active'));
 
+  // Force-save DB to disk before system sleeps so nothing is lost when
+  // sql.js WASM memory gets paged out
+  powerMonitor.on('suspend', () => {
+    console.log('[powerMonitor] System suspending — flushing database to disk...');
+    try {
+      const { saveDb } = require('./database');
+      saveDb();
+      console.log('[powerMonitor] Database flushed OK');
+    } catch (e) {
+      console.error('[powerMonitor] DB flush failed:', e.message);
+    }
+  });
+
+  // On resume: reload the renderer so it re-fetches all data fresh.
+  // This is the most reliable fix for the blank UI after sleep — instead of
+  // trying to recover state, we just let the page reinitialize cleanly.
+  powerMonitor.on('resume', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      console.log('[powerMonitor] System resumed — reloading renderer...');
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.reload();
+        }
+      }, 1500); // 1.5s delay so server has time to fully wake before reload
+    }
+  });
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
