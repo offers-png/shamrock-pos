@@ -13,5 +13,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),
   onThemeChanged: (callback) => ipcRenderer.on('theme-changed', (event, theme) => callback(theme)),
   requestCurrentTheme: () => ipcRenderer.invoke('request-current-theme'),
-  syncTheme: (theme) => ipcRenderer.invoke('sync-theme', theme)
+  syncTheme: (theme) => ipcRenderer.invoke('sync-theme', theme),
+  onRestoreFocus: (callback) => ipcRenderer.on('restore-focus', () => callback())
 });

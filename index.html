@@ -4164,20 +4164,29 @@
         }
       }
 
-      // 1. Fire immediately when window regains focus (alt-tab back, screen wake)
-      window.addEventListener('focus', () => {
-        restoreFocusIfIdle();
-      });
+      // 1. PRIMARY: powerMonitor in Electron main process fires reliably on
+      //    system sleep/wake and screen lock/unlock — this is the most reliable path
+      if (window.electronAPI && window.electronAPI.onRestoreFocus) {
+        window.electronAPI.onRestoreFocus(() => {
+          console.log('[focus] restore-focus signal received from main process');
+          // Force focus unconditionally — this only fires after a real wake/unlock
+          barcodeInput.focus();
+        });
+      }
 
-      // 2. Fire when page becomes visible again (display sleep/wake, browser restore)
+      // 2. visibilitychange — works for tab switches and some sleep scenarios
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
-          // Small delay so OS finishes wake sequence before we claim focus
           setTimeout(restoreFocusIfIdle, 150);
         }
       });
 
-      // 3. Safety-net watchdog every 5s (was 60s — missed first scan after wake)
+      // 3. window focus — works for alt-tab back into the app
+      window.addEventListener('focus', () => {
+        restoreFocusIfIdle();
+      });
+
+      // 4. Safety-net watchdog every 5s — catches anything the above missed
       setInterval(restoreFocusIfIdle, 5000);
     }
 

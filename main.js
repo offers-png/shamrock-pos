@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, screen, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
@@ -263,7 +263,31 @@ app.whenReady().then(async () => {
   setTimeout(() => {
     setupAutoUpdater();
   }, 3000);
-  
+
+  // === POWER MONITOR: restore scanner focus after sleep/wake or screen lock ===
+  // visibilitychange / window.focus are unreliable in Electron after system sleep.
+  // powerMonitor fires reliably in the main process — we send an IPC ping to the
+  // renderer which then immediately restores focus to the barcode input.
+  function sendWakeSignal(reason) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      console.log(`[powerMonitor] ${reason} — sending restore-focus to renderer`);
+      // Bring window to front if it got buried
+      if (!mainWindow.isFocused()) {
+        mainWindow.focus();
+      }
+      // Small delay so OS finishes waking display before we steal focus
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('restore-focus');
+        }
+      }, 300);
+    }
+  }
+
+  powerMonitor.on('resume', () => sendWakeSignal('resume'));
+  powerMonitor.on('unlock-screen', () => sendWakeSignal('unlock-screen'));
+  powerMonitor.on('user-did-become-active', () => sendWakeSignal('user-did-become-active'));
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
