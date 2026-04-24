@@ -20,7 +20,9 @@ const CMD = {
   NORMAL_SIZE: Buffer.from([GS, 0x21, 0x00]),
   CUT_PAPER: Buffer.from([GS, 0x56, 0x42, 0x00]),
   OPEN_DRAWER: Buffer.from([ESC, 0x70, 0x00, 0x19, 0xFA]),
-  LINE_FEED: Buffer.from([LF])
+  LINE_FEED: Buffer.from([LF]),
+  // ESC d n — feed n lines. More reliable than sending n x LF separately.
+  FEED_6_LINES: Buffer.from([ESC, 0x64, 0x06])
 };
 
 let nativePrinter = null;
@@ -155,6 +157,10 @@ function generateReceiptText(payload) {
     lines.push(center('Receipt: ' + saleId));
   }
 
+  // Extra blank lines to push content fully past the print head before cutting
+  lines.push('');
+  lines.push('');
+  lines.push('');
   lines.push('');
   lines.push('');
   lines.push('');
@@ -183,7 +189,9 @@ function printReceiptRaw(payload, includeCut = true, includeDrawer = true) {
     }
 
     if (includeCut) {
-      buffers.push(CMD.LINE_FEED);
+      // ESC d 6 — advance 6 lines past print head before cutting.
+      // Prevents last lines being eaten by the cutter.
+      buffers.push(CMD.FEED_6_LINES);
       buffers.push(CMD.CUT_PAPER);
     }
 
